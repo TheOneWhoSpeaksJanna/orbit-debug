@@ -1,6 +1,6 @@
-package com.omniclaw
+package com.orbitai
 
-import com.omniclaw.core.config.ApiConfig
+import com.orbitai.core.config.ApiConfig
 import org.junit.Test
 
 /**

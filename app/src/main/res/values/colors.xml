@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- OmniClaw Base Palette -->
+    <!-- Orbit AI Base Palette -->
     <color name="omniclaw_bg_dark">#FF0A0E1A</color>
     <color name="omniclaw_surface">#FF141A2E</color>
     <color name="omniclaw_surface_elevated">#FF1C2340</color>
 
-    <!-- OmniClaw Accents (Orbit-inspired cosmic palette) -->
+    <!-- Orbit AI Accents (Orbit-inspired cosmic palette) -->
     <color name="omniclaw_accent_primary">#FF6C63FF</color>
     <color name="omniclaw_accent_secondary">#FF38BDF8</color>
     <color name="omniclaw_accent_tertiary">#FFD946EF</color>

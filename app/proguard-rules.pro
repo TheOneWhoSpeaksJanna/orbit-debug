@@ -7,7 +7,7 @@
 }
 
 # --- Moshi ---
--keep class com.omniclaw.data.api.** { *; }
+-keep class com.orbitai.data.api.** { *; }
 -keepclassmembers class * {
     @com.squareup.moshi.FromJson <methods>;
     @com.squareup.moshi.ToJson <methods>;
@@ -19,7 +19,7 @@
 }
 
 # --- Retrofit ---
--keep,allowobfuscation interface com.omniclaw.data.api.**.*Service
+-keep,allowobfuscation interface com.orbitai.data.api.**.*Service
 -keep,allowobfuscation interface * {
     @retrofit2.http.* <methods>;
 }
@@ -49,8 +49,8 @@
 -keep interface dev.rikka.shizuku.** { *; }
 
 # --- Model / Entity classes (keep for serialization and DB) ---
--keep class com.omniclaw.data.local.entity.** { *; }
--keep class com.omniclaw.domain.models.** { *; }
+-keep class com.orbitai.data.local.entity.** { *; }
+-keep class com.orbitai.domain.models.** { *; }
 
 # --- Compose ---
 -keepclassmembers class * {

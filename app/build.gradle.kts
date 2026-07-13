@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-  namespace = "com.omniclaw"
+  namespace = "com.orbitai"
   compileSdk = 36
 
   flavorDimensions += "agent"
@@ -17,12 +17,12 @@ android {
       dimension = "agent"
       buildConfigField("String", "FLAVOR_PRESET_AGENT_ID", "\"\"")
       buildConfigField("String", "FLAVOR_PRESET_AGENT_NAME", "\"\"")
-      buildConfigField("String", "FLAVOR_APP_LABEL", "\"OmniClaw\"")
-      manifestPlaceholders["appLabel"] = "OmniClaw"
+      buildConfigField("String", "FLAVOR_APP_LABEL", "\"Orbit AI\"")
+      manifestPlaceholders["appLabel"] = "Orbit AI"
     }
     create("opencode") {
       dimension = "agent"
-      applicationIdSuffix = ".opencode"
+      applicationId = "Orbit.opencode"
       versionNameSuffix = "-opencode"
       buildConfigField("String", "FLAVOR_PRESET_AGENT_ID", "\"opencode\"")
       buildConfigField("String", "FLAVOR_PRESET_AGENT_NAME", "\"OpenCode\"")
@@ -33,7 +33,7 @@ android {
     }
     create("openclaude") {
       dimension = "agent"
-      applicationIdSuffix = ".openclaude"
+      applicationId = "Orbit.openclaude"
       versionNameSuffix = "-openclaude"
       buildConfigField("String", "FLAVOR_PRESET_AGENT_ID", "\"openclaude\"")
       buildConfigField("String", "FLAVOR_PRESET_AGENT_NAME", "\"OpenClaude\"")
@@ -44,7 +44,7 @@ android {
     }
     create("claudecode") {
       dimension = "agent"
-      applicationIdSuffix = ".claudecode"
+      applicationId = "Orbit.claudecode"
       versionNameSuffix = "-claudecode"
       buildConfigField("String", "FLAVOR_PRESET_AGENT_ID", "\"claude-code\"")
       buildConfigField("String", "FLAVOR_PRESET_AGENT_NAME", "\"Claude Code\"")
@@ -55,7 +55,7 @@ android {
     }
     create("codex") {
       dimension = "agent"
-      applicationIdSuffix = ".codex"
+      applicationId = "Orbit.codex"
       versionNameSuffix = "-codex"
       buildConfigField("String", "FLAVOR_PRESET_AGENT_ID", "\"codex\"")
       buildConfigField("String", "FLAVOR_PRESET_AGENT_NAME", "\"Codex\"")
@@ -67,7 +67,7 @@ android {
   }
 
   defaultConfig {
-    applicationId = "com.aistudio.orbit.xqwtyz"
+    applicationId = "Orbit.app"
     minSdk = 24
     targetSdk = 36
     versionCode = 13

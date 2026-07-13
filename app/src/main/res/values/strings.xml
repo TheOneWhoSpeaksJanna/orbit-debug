@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OmniClaw</string>
+    <string name="app_name">Orbit AI</string>
 
     <!-- Common -->
     <string name="back">Back</string>
@@ -14,7 +14,7 @@
     <string name="send">Send</string>
 
     <!-- DashboardScreen -->
-    <string name="omniclaw_workspace">OmniClaw Workspace</string>
+    <string name="omniclaw_workspace">Orbit AI Workspace</string>
     <string name="local_tools">Local Tools</string>
     <string name="new_session">New Session</string>
     <string name="agent">Agent</string>
@@ -46,7 +46,7 @@
 
     <!-- SetupWizard -->
     <string name="finish_setup">Finish Setup</string>
-    <string name="omniclaw_ai_title">OmniClaw</string>
+    <string name="omniclaw_ai_title">Orbit AI</string>
     <string name="omniclaw_ai_subtitle">Your powerful on-device autonomous AI OS. Let\'s get everything configured securely.</string>
     <string name="step_welcome">Welcome</string>
     <string name="step_theme">Theme</string>
@@ -62,7 +62,7 @@
     <string name="connection_successful">Connection successful!</string>
     <string name="connection_failed">Connection failed. Check your API key.</string>
     <string name="elevated_permissions">Elevated Permissions</string>
-    <string name="shizuku_description">OmniClaw can use Shizuku to perform system-level actions (like securely managing apps). This does not claim root access unless your device is rooted.</string>
+    <string name="shizuku_description">Orbit AI can use Shizuku to perform system-level actions (like securely managing apps). This does not claim root access unless your device is rooted.</string>
     <string name="request_permission">Request Permission</string>
     <string name="enable_shizuku">Enable Shizuku Integration</string>
     <string name="shizuku_required">Requires Shizuku app to be running</string>
@@ -75,12 +75,12 @@
 
     <!-- Storage Permission -->
     <string name="storage_title">Log Storage</string>
-    <string name="storage_description">OmniClaw writes logs to your device\'s public storage (/storage/emulated/0/omniclaw_logs/) so you can easily access and share them. Grant file access to enable this feature.</string>
+    <string name="storage_description">Orbit AI writes logs to your device\'s public storage (/storage/emulated/0/omniclaw_logs/) so you can easily access and share them. Grant file access to enable this feature.</string>
     <string name="storage_grant_button">Grant File Access</string>
     <string name="storage_granted">File access granted ✓</string>
     <string name="storage_skip">Logs will be stored in app-private storage</string>
     <string name="local_runtime_setup">Local Runtime Setup</string>
-    <string name="runtime_description">OmniClaw uses a companion service to execute local shell commands natively on your device.</string>
+    <string name="runtime_description">Orbit AI uses a companion service to execute local shell commands natively on your device.</string>
     <string name="runtime_active">Native runtime active.</string>
     <string name="runtime_ready">No external apps like Termux are required. The internal command runner is ready.</string>
     <string name="summary">Summary:</string>
@@ -111,7 +111,7 @@
     <string name="warning_normal">Execution happens directly on your device natively.</string>
     <string name="speed_format">%1$.1f MB/s</string>
     <string name="time_remaining">%1$d s remaining</string>
-    <string name="termux_explanation">OmniClaw uses a companion service to execute local shell commands natively on your device.</string>
+    <string name="termux_explanation">Orbit AI uses a companion service to execute local shell commands natively on your device.</string>
 
     <!-- Finalizing Overlay (loading screen after Finish Setup) -->
     <string name="finalizing_title">Setting up your agent</string>

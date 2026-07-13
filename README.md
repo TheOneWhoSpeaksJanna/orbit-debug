@@ -117,7 +117,7 @@ The APKs land in `app/build/outputs/apk/<flavor>/debug/`.
 Logs go to both file and logcat:
 
 - **File**: Settings → Diagnostics shows the path (under the app's files directory).
-- **Logcat**: `adb logcat -s OmniClaw` shows real-time logs.
+- **Logcat**: `adb logcat -s Orbit AI` shows real-time logs.
 
 Log levels: `I` (info), `W` (warnings), `E` (errors), `D` (debug). Every command execution, package install, and agent run is logged with full context.
 
