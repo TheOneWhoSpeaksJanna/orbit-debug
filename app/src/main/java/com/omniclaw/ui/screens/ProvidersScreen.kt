@@ -27,13 +27,10 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -55,10 +52,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.omniclaw.ui.components.AnimatedGlassCard
 import com.omniclaw.ui.components.BrandIcons
+import com.omniclaw.ui.components.OrbitButton
+import com.omniclaw.ui.components.OrbitButtonVariant
+import com.omniclaw.ui.components.OrbitCard
 import com.omniclaw.ui.theme.MotionTokens
-
 import com.omniclaw.ui.theme.staggeredEntrance
 import com.omniclaw.ui.viewmodels.ConnectionState
 import com.omniclaw.ui.viewmodels.ProviderConfig
@@ -247,11 +245,9 @@ fun ProvidersScreen(
                     )
                     if (editApiKeyValue.isNotBlank()) {
                         Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedButton(
+                        OrbitButton(
                             onClick = { showDeleteConfirm = true },
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error
-                            ),
+                            variant = OrbitButtonVariant.Outlined,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Icon(
@@ -266,12 +262,9 @@ fun ProvidersScreen(
                 }
             },
             confirmButton = {
-                Button(
+                OrbitButton(
                     onClick = { viewModel.saveApiKey() },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.secondary,
-                        contentColor = MaterialTheme.colorScheme.onSecondary
-                    )
+                    variant = OrbitButtonVariant.Primary
                 ) {
                     Text(KEY_DIALOG_SAVE)
                 }
@@ -297,14 +290,12 @@ fun ProvidersScreen(
                     Text("This will remove the saved API key for $editingProvider.")
                 },
                 confirmButton = {
-                    Button(
+                    OrbitButton(
                         onClick = {
                             showDeleteConfirm = false
                             viewModel.removeApiKey()
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        )
+                        variant = OrbitButtonVariant.Primary
                     ) {
                         Text("Remove")
                     }
@@ -328,7 +319,7 @@ private fun ProviderHealthCard(
     onSetActive: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    
+
 
     val accentColor = MaterialTheme.colorScheme.secondary
     val errorColor = MaterialTheme.colorScheme.error
@@ -341,15 +332,14 @@ private fun ProviderHealthCard(
     val statusText = provider.connectionState.statusText()
     val isVerifying = provider.connectionState is ConnectionState.Verifying
 
-    AnimatedGlassCard(
+    OrbitCard(
+        interactive = true,
         onClick = if (isSelected) null else onSetActive,
-        modifier = modifier.fillMaxWidth(),
-        radius = 14
+        modifier = modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+                .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -430,21 +420,16 @@ private fun ProviderHealthCard(
             }
             Spacer(modifier = Modifier.width(4.dp))
             // Verify button
-            Button(
+            OrbitButton(
                 onClick = onVerify,
                 enabled = !isVerifying,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.secondary
-                ),
-                shape = RoundedCornerShape(10.dp),
-                contentPadding = ButtonDefaults.TextButtonContentPadding
+                variant = OrbitButtonVariant.Tonal
             ) {
                 if (isVerifying) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.secondary
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                 } else {
