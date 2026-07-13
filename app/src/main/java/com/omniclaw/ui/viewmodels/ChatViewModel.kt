@@ -550,63 +550,20 @@ class ChatViewModel(
      * Most CLI agents (openclaude, claude, codex, opencode) read API keys
      * from environment variables. Without this, the agent doesn't know
      * which provider/API key to use and asks the user to log in.
+     *
+     * The provider→env-var mapping lives in the pure, testable helper
+     * [com.omniclaw.core.auth.buildProviderEnvExports]; this method adds the
+     * catalog base-URL fallback (which needs an Android Context) and the
+     * PRoot SHELL export.
      */
     private fun buildEnvExports(provider: String, apiKey: String, model: String, useSubscription: Boolean = false): String {
         if (apiKey.isBlank()) return ""
 
-        val exports = StringBuilder()
-
-        // CRITICAL: CLAUDE_CODE_USE_OPENAI=1 tells OpenClaude to use the
-        // OpenAI-compatible provider instead of the default Gitlawb Opengateway.
-        // Without this, OpenClaude ignores OPENAI_API_KEY and asks for
-        // OPENGATEWAY_API_KEY instead.
-        exports.append("export CLAUDE_CODE_USE_OPENAI=1")
-
-        // Always set OPENAI_API_KEY — OpenClaude reads this when
-        // CLAUDE_CODE_USE_OPENAI=1
-        exports.append(" && export OPENAI_API_KEY='$apiKey'")
-
-        // Set provider-specific env vars + base URL
-        var baseUrlSet = false
-        when {
-            provider.contains("OpenRouter", ignoreCase = true) -> {
-                exports.append(" && export OPENROUTER_API_KEY='$apiKey'")
-                exports.append(" && export OPENAI_BASE_URL='https://openrouter.ai/api/v1'")
-                baseUrlSet = true
-            }
-            provider.contains("Anthropic", ignoreCase = true) || provider.contains("Claude", ignoreCase = true) -> {
-                // Claude Code supports TWO auth methods:
-                //  - api-key:      ANTHROPIC_API_KEY (standard API key)
-                //  - subscription: ANTHROPIC_AUTH_TOKEN (Claude Max / claude.ai login)
-                val (envName, envValue) = com.omniclaw.core.auth.anthropicAuthEnv(
-                    provider, if (useSubscription) "subscription" else "api-key", apiKey
-                )
-                if (envName.isNotBlank()) {
-                    exports.append(" && export $envName='$envValue'")
-                }
-            }
-            provider.contains("Gemini", ignoreCase = true) -> {
-                // Gemini exposes an OpenAI-compatible endpoint, so the agent
-                // (told to use the OpenAI path via CLAUDE_CODE_USE_OPENAI=1)
-                // can reach it through OPENAI_BASE_URL + OPENAI_API_KEY.
-                exports.append(" && export OPENAI_BASE_URL='https://generativelanguage.googleapis.com/v1beta/openai/'")
-                exports.append(" && export GOOGLE_API_KEY='$apiKey'")
-                exports.append(" && export GEMINI_API_KEY='$apiKey'")
-                baseUrlSet = true
-            }
-            provider.contains("DeepSeek", ignoreCase = true) -> {
-                exports.append(" && export OPENAI_BASE_URL='https://api.deepseek.com/v1'")
-                baseUrlSet = true
-            }
-            provider.contains("Groq", ignoreCase = true) -> {
-                exports.append(" && export OPENAI_BASE_URL='https://api.groq.com/openai/v1'")
-                baseUrlSet = true
-            }
-            provider.contains("xAI", ignoreCase = true) || provider.contains("Grok", ignoreCase = true) -> {
-                exports.append(" && export OPENAI_BASE_URL='https://api.x.ai/v1'")
-                baseUrlSet = true
-            }
-        }
+        val (coreExports, baseUrlSetByCore) = com.omniclaw.core.auth.buildProviderEnvExports(
+            provider, apiKey, model, useSubscription
+        )
+        val exports = StringBuilder(coreExports)
+        var baseUrlSet = baseUrlSetByCore
 
         // Fallback: for any other catalog provider (Venice, Fireworks, Mistral,
         // NVIDIA, Together, MiniMax, etc.) look up its baseUrl from the provider
@@ -628,18 +585,6 @@ class ChatViewModel(
                     "provider=$provider reason=${e.message}"
                 )
             }
-        }
-
-        // Set the model if specified. OpenClaude (CLAUDE_CODE_USE_OPENAI=1) reads
-        // ANTHROPIC_MODEL for the main model and ANTHROPIC_SMALL_FAST_MODEL for the
-        // fast/cheap sub-calls. If we only set OPENAI_MODEL the agent falls back to
-        // its built-in default (often a paid model), which makes free-tier keys
-        // fail with "API quota exhausted or not enabled". Export all three so the
-        // app's selected model (or the provider default) is honored everywhere.
-        if (model.isNotBlank() && model != "auto") {
-            exports.append(" && export OPENAI_MODEL='$model'")
-            exports.append(" && export ANTHROPIC_MODEL='$model'")
-            exports.append(" && export ANTHROPIC_SMALL_FAST_MODEL='$model'")
         }
 
         // Ensure the agent's Bash tool can find a POSIX shell inside PRoot. The
