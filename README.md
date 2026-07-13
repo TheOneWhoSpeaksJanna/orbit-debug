@@ -8,7 +8,7 @@ Orbit-AI ships as **five editions**, each bundling one agent (or, for the Normal
 
 | Flavor | Bundled agent | App label | Default provider |
 |--------|---------------|-----------|------------------|
-| `normal` | **User chooses** in the setup wizard (OpenClaude / OpenCode / Claude Code / Codex / Hermes) | Orbit AI | OpenRouter (`tencent/hy3:free`) |
+| `normal` | **User chooses** in the setup wizard (OpenClaude / Claude Code / OpenCode / Codex / Default) | Orbit AI | OpenRouter (`tencent/hy3:free`) |
 | `openclaude` | OpenClaude (`@gitlawb/openclaude`) | Orbit + OpenClaude | OpenRouter (any provider) |
 | `opencode` | OpenCode (`@opencode-ai/cli`, binary `lildax`) | Orbit + OpenCode | OpenRouter (any provider) |
 | `claudecode` | Claude Code (`@anthropic-ai/claude-code`) | Orbit + Claude Code | Anthropic Claude |
@@ -89,7 +89,7 @@ When you send a message to an agent:
 
 ## Building
 
-Prerequisites: Android SDK (platform + build-tools), JDK 21+.
+Prerequisites: Android SDK (platform + build-tools), JDK 11 (the project compiles against Java 11 / `compileSdk 36`).
 
 ```bash
 git clone https://github.com/TheOneWhoSpeaksJanna/Orbit-AI.git
@@ -105,7 +105,7 @@ The APKs land in `app/build/outputs/apk/<flavor>/debug/`.
 ## First launch flow
 
 1. App starts → Setup Wizard.
-2. **Normal edition only:** pick the agent you want (OpenClaude / OpenCode / Claude Code / Codex / Hermes).
+2. **Normal edition only:** pick the agent you want (OpenClaude / Claude Code / OpenCode / Codex / Default).
 3. Choose a provider and enter its API key (or, for Claude Code, an API key **or** a Claude Max subscription token).
 4. App extracts the Linux runtime rootfs from APK assets.
 5. App installs the selected agent via `npm install -g` inside the runtime.
