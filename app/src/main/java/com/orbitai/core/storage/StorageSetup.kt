@@ -69,13 +69,13 @@ object StorageSetup {
                             arrayOf("ln", "-s", target, link.absolutePath)
                         ).waitFor()
                     } catch (e: Exception) {
-                        FileLogger.w(TAG, "symlink failed: $name -> $target", e.message)
+                        FileLogger.w(TAG, "symlink failed: $name -> $target", e.message ?: "")
                     }
                 }
                 FileLogger.i(TAG, "storage symlinks created under ${storageLink.absolutePath}")
             }
         } catch (e: Exception) {
-            FileLogger.e(TAG, "createStorageSymlinks failed", e, e.message)
+            FileLogger.e(TAG, "createStorageSymlinks failed", e, e.message ?: "")
         }
     }
 }
