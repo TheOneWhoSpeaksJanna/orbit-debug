@@ -469,6 +469,13 @@ class TermuxRuntime(private val context: Context) {
                 "-b", "/odm",
                 "-b", "/linkerconfig",
                 "-b", "/data/local/tmp:/tmp",
+                // CRITICAL: expose the emulated shared storage inside the
+                // rootfs so the agent can write files the USER can see
+                // (e.g. ~/storage/downloads -> /storage/emulated/0/Download).
+                // Without this bind, /storage doesn't exist inside the chroot
+                // and every write to shared storage fails with
+                // "Directory nonexistent" (the dangling symlink problem).
+                "-b", "/storage",
                 // Make our runtime dir visible inside the rootfs at /orbit
                 "-b", "$runtimeDir:/orbit",
                 // Set working directory to Termux HOME

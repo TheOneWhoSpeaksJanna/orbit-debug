@@ -85,7 +85,23 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestStoragePermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return // handled via all-files intent in wizard
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Scoped storage: need all-files access so /storage/emulated/0
+            // is visible. The wizard also offers this, but we request it
+            // headlessly here so the AI can write outside home with no taps.
+            if (!android.os.Environment.isExternalStorageManager()) {
+                try {
+                    val intent = android.content.Intent(
+                        android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION
+                    ).apply { data = android.net.Uri.parse("package:$packageName") }
+                    startActivity(intent)
+                    FileLogger.i(TAG, "requesting all-files access")
+                } catch (_: Exception) {
+                    FileLogger.w(TAG, "cannot launch all-files settings intent")
+                }
+            }
+            return
+        }
         val needed = arrayOf(
             Manifest.permission.READ_EXTERNAL_STORAGE,
             Manifest.permission.WRITE_EXTERNAL_STORAGE
