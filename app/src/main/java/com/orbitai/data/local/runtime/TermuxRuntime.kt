@@ -499,7 +499,15 @@ class TermuxRuntime(private val context: Context) {
             env["TMPDIR"] = "$termuxPrefix/tmp"
             env["LANG"] = "en_US.UTF-8"
             env["TERM"] = "xterm-256color"
-            env["LD_LIBRARY_PATH"] = "$termuxPrefix/lib:/system/lib64"
+            // IMPORTANT: LD_LIBRARY_PATH is consumed by the HOST linker when it
+            // loads libproot.so (and its deps like libtalloc) — this happens
+            // BEFORE PRoot chroots, so it must point at the HOST-side paths,
+            // NOT the in-rootfs absolute path ($termuxPrefix = /data/data/...).
+            // Pointing it at the chroot path made PRoot unable to find its own
+            // shared libs -> every terminal command failed with a loader error.
+            // Inside the chroot, Termux binaries resolve their libs via their
+            // own rpath, so the in-rootfs path is unnecessary.
+            env["LD_LIBRARY_PATH"] = "${prefixDir.absolutePath}/lib:/system/lib64"
             // OpenClaude's Bash tool needs SHELL to point at a POSIX shell inside
             // the rootfs. The termux rootfs ships usr/bin/{sh,bash} but has no
             // /bin/sh and no /etc/passwd entry, so without this the agent reports
