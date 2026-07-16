@@ -172,7 +172,10 @@ fun ChatScreen(
                         Text(
                             currentSession?.title ?: DEFAULT_TITLE,
                             fontWeight = FontWeight.SemiBold,
-                            style = MaterialTheme.typography.titleMedium
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.widthIn(max = 96.dp)
                         )
                         Spacer(Modifier.width(4.dp))
                         SuggestionChip(
@@ -200,9 +203,13 @@ fun ChatScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = selectedModel.ifBlank { displayModels.first() },
+                                text = selectedModel.ifBlank { displayModels.first() }
+                                    .substringAfterLast('/'),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                modifier = Modifier.widthIn(max = 90.dp)
                             )
                             Icon(
                                 Icons.Default.ArrowDropDown,
@@ -235,7 +242,7 @@ fun ChatScreen(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
                                 .clickable { showThinkingBrowser = true }
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
@@ -244,12 +251,14 @@ fun ChatScreen(
                                 modifier = Modifier.size(13.dp),
                                 tint = MaterialTheme.colorScheme.secondary
                             )
-                            Spacer(Modifier.width(2.dp))
+                            Spacer(Modifier.width(3.dp))
                             Text(
-                                text = thinkingModel.ifBlank { "Thinking" }
-                                    .substringAfterLast('/').take(14),
+                                text = if (thinkingModel.isBlank()) "Thinking"
+                                else "💭 " + thinkingModel.substringAfterLast('/').take(12),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.secondary
+                                color = MaterialTheme.colorScheme.secondary,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                         }
                     }
