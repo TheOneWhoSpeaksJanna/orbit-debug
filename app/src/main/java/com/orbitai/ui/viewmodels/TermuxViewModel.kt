@@ -71,11 +71,17 @@ class TermuxViewModel(
                 termuxRuntime.install { progress, status ->
                     FileLogger.d(TAG, "Rootfs install: $progress — $status")
                 }
-                // Headless equivalent of `termux-setup-storage`: expose
-                // /storage/emulated/0 inside the Termux HOME so the AI can
-                // write outside its sandbox (e.g. /storage/emulated/0/Download).
-                StorageSetup.createStorageSymlinks(termuxRuntime.homeDir)
             }
+
+            // Headless equivalent of `termux-setup-storage`: expose
+            // /storage/emulated/0 inside the Termux HOME so the AI can
+            // write outside its sandbox (e.g. /storage/emulated/0/Download).
+            // Run this EVERY time the terminal is used (not just on first
+            // install) — the rootfs is normally pre-installed by the Setup
+            // Wizard, so gating it behind !isInstalled would skip it entirely
+            // and leave ~/storage absent. It is idempotent (deletes + recreates
+            // the symlinks), so re-running is cheap and safe.
+            StorageSetup.createStorageSymlinks(termuxRuntime.homeDir)
 
             val executionResult = termuxRuntime.executeInTermux(trimmed, "")
             val log = TermuxLog(

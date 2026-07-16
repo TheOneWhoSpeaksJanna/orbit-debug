@@ -114,10 +114,15 @@ fun DashboardScreen(
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(Icons.Default.Settings, contentDescription = CD_SETTINGS)
                     }
-                    if (isShizukuActive) {
-                        IconButton(
-                            enabled = !isUpdating,
-                            onClick = {
+                    // Always show the update button. When Shizuku is active the
+                    // install is silent; when it is not, runSilentUpdate falls
+                    // back to NeedsManualInstall and opens the system installer.
+                    // (Previously this was gated behind isShizukuActive, which
+                    // hid the button entirely for the common case of Shizuku
+                    // not installed — leaving users with no way to update.)
+                    IconButton(
+                        enabled = !isUpdating,
+                        onClick = {
                                 scope.launch {
                                     isUpdating = true
                                     try {
@@ -126,7 +131,7 @@ fun DashboardScreen(
                                             is SilentUpdater.UpdateResult.Success ->
                                                 "Updated successfully (silent install)."
                                             is SilentUpdater.UpdateResult.Failure ->
-                                                "Update failed: ${result.reason}"
+                                                result.reason
                                             is SilentUpdater.UpdateResult.NeedsManualInstall -> {
                                                 // No Shizuku: open the system installer.
                                                 val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
@@ -158,7 +163,6 @@ fun DashboardScreen(
                                 Icon(Icons.Default.SystemUpdate, contentDescription = CD_UPDATE)
                             }
                         }
-                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
@@ -416,7 +420,7 @@ private suspend fun runSilentUpdate(
             .build()
         val apiResp = client.newCall(apiReq).execute()
         if (!apiResp.isSuccessful) {
-            return SilentUpdater.UpdateResult.Failure("GitHub API error: ${apiResp.code}")
+            return SilentUpdater.UpdateResult.Failure("Couldn't reach the update server (HTTP ${apiResp.code}).")
         }
         val bodyStr = apiResp.body?.string().orEmpty()
 
@@ -470,6 +474,8 @@ private suspend fun runSilentUpdate(
         }
         container.silentUpdater.installApk(apkFile)
     } catch (e: Exception) {
-        SilentUpdater.UpdateResult.Failure("Update error: ${e.message}")
+        val reason = e.message?.takeIf { it.isNotBlank() }
+            ?: "network error (couldn't reach GitHub)"
+        SilentUpdater.UpdateResult.Failure("Couldn't check for updates — $reason")
     }
 }
