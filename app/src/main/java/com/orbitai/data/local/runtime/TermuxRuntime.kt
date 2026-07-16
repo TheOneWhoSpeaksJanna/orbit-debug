@@ -593,6 +593,130 @@ class TermuxRuntime(private val context: Context) {
         }
     }
 
+    /**
+     * Streaming variant of [executeInTermux].
+     *
+     * Runs the command inside the Termux rootfs under PRoot and invokes
+     * [onLine] for every stdout/stderr line AS IT ARRIVES, instead of
+     * blocking until the process exits. This is what powers the chat
+     * "transcript" / "thinking" view so the user can see exactly what the
+     * agent is doing (tool calls, reasoning, errors) in real time instead
+     * of only discovering problems after the run finishes.
+     *
+     * Returns the same [CommandResult] as [executeInTermux] for callers that
+     * still want the full captured output. The watchdog from executeInTermux
+     * is preserved so a hung command cannot leak threads.
+     */
+    suspend fun executeInTermuxStreamed(
+        command: String,
+        stdin: String = "",
+        onLine: (String) -> Unit
+    ): CommandResult = withContext(Dispatchers.IO) {
+        if (!isInstalled) {
+            onLine("Termux rootfs not installed.")
+            return@withContext CommandResult("Termux rootfs not installed.", -1, command)
+        }
+
+        val execStart = System.currentTimeMillis()
+        FileLogger.d(TAG, "Termux exec start (streamed)", "cmd=${command.take(200)}")
+
+        try {
+            val prootArgs = mutableListOf(
+                prootPath,
+                "--kill-on-exit",
+                "-r", rootfsDir.absolutePath,
+                "-b", "/dev",
+                "-b", "/proc",
+                "-b", "/sys",
+                "-b", "/system",
+                "-b", "/vendor",
+                "-b", "/apex",
+                "-b", "/odm",
+                "-b", "/linkerconfig",
+                "-b", "/data/local/tmp:/tmp",
+                "-b", "/storage",
+                "-b", "$runtimeDir:/orbit",
+                "-w", termuxHome,
+                "$termuxPrefix/bin/sh", "-c", command
+            )
+
+            val pb = ProcessBuilder(prootArgs)
+            pb.directory(runtimeDir)
+
+            val env = pb.environment()
+            env["PROOT_LOADER"] = prootLoaderPath
+            env["PROOT_LOADER_32"] = prootLoaderPath
+            env["PROOT_TMP_DIR"] = tmpDir.absolutePath
+            env["PREFIX"] = termuxPrefix
+            env["PATH"] = "$termuxPrefix/bin"
+            env["HOME"] = termuxHome
+            env["TMPDIR"] = "$termuxPrefix/tmp"
+            env["LANG"] = "en_US.UTF-8"
+            env["TERM"] = "xterm-256color"
+            env["LD_LIBRARY_PATH"] = "${prefixDir.absolutePath}/lib:/system/lib64"
+            env["SHELL"] = "$termuxPrefix/bin/bash"
+
+            val process = pb.start()
+
+            if (stdin.isNotEmpty()) {
+                process.outputStream.write(stdin.toByteArray())
+                process.outputStream.flush()
+            }
+            process.outputStream.close()
+
+            val stdoutText = StringBuilder()
+            val stderrText = StringBuilder()
+
+            val stdoutThread = Thread {
+                process.inputStream.bufferedReader().use { reader ->
+                    reader.forEachLine {
+                        stdoutText.appendLine(it)
+                        onLine(it)
+                    }
+                }
+            }
+            val stderrThread = Thread {
+                process.errorStream.bufferedReader().use { reader ->
+                    reader.forEachLine {
+                        stderrText.appendLine(it)
+                        onLine(it)
+                    }
+                }
+            }
+            stdoutThread.start()
+            stderrThread.start()
+
+            val maxMillis = 5 * 60 * 1000L
+            val waited = process.waitFor(maxMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
+            if (!waited) {
+                FileLogger.w(TAG, "Termux exec watchdog", "cmd=${command.take(200)} killed after ${maxMillis}ms (hung)")
+                try { process.destroyForcibly() } catch (_: Exception) {}
+            }
+            stdoutThread.join(2000)
+            if (stdoutThread.isAlive) stdoutThread.interrupt()
+            stderrThread.join(2000)
+            if (stderrThread.isAlive) stderrThread.interrupt()
+
+            val exitCode = process.exitValue()
+            val output = stdoutText.toString().trim()
+            val stderr = stderrText.toString().trim()
+            val execDuration = System.currentTimeMillis() - execStart
+
+            if (exitCode != 0) {
+                FileLogger.w(TAG, "Termux exec failed (streamed)", "exit=$exitCode time=${execDuration}ms stderr=${stderr.take(500)}")
+            }
+
+            val combinedOutput = if (stderr.isNotBlank()) "$output\n$stderr" else output
+            CommandResult(combinedOutput.lines()
+                .filter { !it.trim().startsWith("WARNING: linker:") }
+                .joinToString("\n").trimEnd(), exitCode, command)
+        } catch (e: Exception) {
+            FileLogger.e(TAG, "Termux exec exception (streamed)", e, "cmd=${command.take(100)} reason=${e.message}")
+            onLine("Error: ${e.message}")
+            CommandResult("Error: ${e.message}", -1, command)
+        }
+    }
+
     fun isToolInstalled(tool: String): Boolean = File(binDir, tool).exists()
 
     /**

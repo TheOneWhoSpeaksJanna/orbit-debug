@@ -48,6 +48,10 @@ class OrbitAiRepositoryImpl(
         dao.deleteSession(sessionId)
     }
 
+    override suspend fun deleteMessagesForSession(sessionId: String) {
+        dao.deleteMessagesForSession(sessionId)
+    }
+
     override suspend fun updateSessionTitle(sessionId: String, title: String) {
         dao.updateSessionTitle(sessionId, title, System.currentTimeMillis())
     }

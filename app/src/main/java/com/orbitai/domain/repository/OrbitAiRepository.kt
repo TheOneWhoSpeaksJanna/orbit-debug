@@ -13,6 +13,7 @@ interface OrbitAiRepository {
 
     fun getMessagesForSession(sessionId: String): Flow<List<Message>>
     suspend fun insertMessage(message: Message)
+    suspend fun deleteMessagesForSession(sessionId: String)
 
     suspend fun deleteEmptySessions()
 

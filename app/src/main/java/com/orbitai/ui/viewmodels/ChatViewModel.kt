@@ -48,9 +48,46 @@ class ChatViewModel(
     private val localCommandRunner: LocalCommandRunner,
     private val prefsManager: PreferencesManager,
     private val openCodeRepository: OpenCodeRepository,
-    private val termuxRuntime: TermuxRuntime
+    private val termuxRuntime: TermuxRuntime,
+    private val silentUpdater: com.orbitai.data.local.updater.SilentUpdater
 ) : ViewModel() {
     private val exceptionHandler = CoroutineExceptionHandlerFactory.create("ChatViewModel")
+
+    // Live "transcript" of the agent's raw stdout/stderr as it streams in.
+    // This is the transparency feature: instead of only seeing the final
+    // answer (and discovering problems after the fact), the user watches
+    // exactly what the agent does — tool calls, reasoning, errors — live.
+    private val _streamLines = MutableStateFlow<List<String>>(emptyList())
+    val streamLines: StateFlow<List<String>> = _streamLines.asStateFlow()
+    private val _showTranscript = MutableStateFlow(false)
+    val showTranscript: StateFlow<Boolean> = _showTranscript.asStateFlow()
+
+    // Set by the host screen so slash commands can navigate (e.g. /skills).
+    var onNavigateToSkills: (() -> Unit)? = null
+
+    // Attachments queued for the next message (images / files). The agent
+    // receives their display names; deep multimodal ingestion is a follow-up.
+    private val _attachments = MutableStateFlow<List<AttachmentItem>>(emptyList())
+    val attachments: StateFlow<List<AttachmentItem>> = _attachments.asStateFlow()
+
+    fun attachFile(uri: android.net.Uri) {
+        val ctx = termuxRuntime.appContext
+        val name = try {
+            ctx.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0 && c.moveToFirst()) c.getString(idx) else uri.lastPathSegment
+            } ?: uri.lastPathSegment ?: "file"
+        } catch (_: Exception) { uri.lastPathSegment ?: "file" }
+        _attachments.value = _attachments.value + AttachmentItem(uri = uri.toString(), displayName = name)
+    }
+
+    fun removeAttachment(item: AttachmentItem) {
+        _attachments.value = _attachments.value.filter { it != item }
+    }
+
+    fun clearAttachments() {
+        _attachments.value = emptyList()
+    }
 
     private val _currentSession = MutableStateFlow<ChatSession?>(null)
     val currentSession: StateFlow<ChatSession?> = _currentSession.asStateFlow()
@@ -76,6 +113,11 @@ class ChatViewModel(
     data class PendingCommand(
         val command: String,
         val isSudo: Boolean
+    )
+
+    data class AttachmentItem(
+        val uri: String,
+        val displayName: String
     )
 
     // AI loop state
@@ -227,6 +269,15 @@ class ChatViewModel(
     }
 
     fun sendMessage(content: String) {
+        val text = content.trim()
+        if (text.isEmpty()) return
+
+        // Slash commands: route before any agent execution.
+        if (text.startsWith("/")) {
+            handleSlashCommand(text)
+            return
+        }
+
         val session = _currentSession.value ?: return
         viewModelScope.launch(exceptionHandler) {
             // Persist session on first message (blank sessions never hit the DB)
@@ -347,33 +398,33 @@ class ChatViewModel(
                     val envExports = buildEnvExports(activeProvider, apiKey, model, useSubscription)
                     com.orbitai.core.logging.FileLogger.i("ChatViewModel", "Agent env", "provider=$activeProvider model=$model keyLen=${apiKey.length}")
 
-                    com.orbitai.core.logging.FileLogger.i("ChatViewModel", "Agent exec start (PRoot)", "cmd=$runCmd content=${content.take(80)}")
+                    com.orbitai.core.logging.FileLogger.i("ChatViewModel", "Agent exec start (PRoot, streamed)", "cmd=$runCmd content=${content.take(80)}")
+                    _streamLines.value = emptyList()
+                    _showTranscript.value = true
                     val escaped = content.replace("\"", "\\\"").replace("`", "\\`").replace("$", "\\$")
 
                     // Method 1: -p flag (OpenClaude's non-interactive mode)
-                    // openclaude -p "prompt" is the correct way to send a one-shot prompt.
-                    // --dangerously-skip-permissions is gated on the permission level
-                    // (FULL_ACCESS only) so NORMAL/RULES enforce per-action approval.
                     var fullCmd = "$envExports $runCmd -p \"$escaped\"$dangerouslySkip"
-                    var result = termuxRuntime.executeInTermux(fullCmd, "")
+                    var result = termuxRuntime.executeInTermuxStreamed(fullCmd, "") { line ->
+                        _streamLines.value = _streamLines.value + line
+                    }
                     com.orbitai.core.logging.FileLogger.i("ChatViewModel", "Agent exec (-p flag)", "exit=${result.exitCode} output=${result.output.take(2000)}")
-
-                    // Remember the first attempt's output so a later, weaker
-                    // fallback that fails with a less useful message doesn't
-                    // clobber the original (often more informative) error.
-                    val firstResult = result
 
                     // If -p flag failed, try stdin pipe
                     if (result.exitCode != 0 || result.output.isBlank()) {
                         fullCmd = "$envExports echo \"$escaped\" | $runCmd -p$dangerouslySkip"
-                        result = termuxRuntime.executeInTermux(fullCmd, "")
+                        result = termuxRuntime.executeInTermuxStreamed(fullCmd, "") { line ->
+                            _streamLines.value = _streamLines.value + line
+                        }
                         com.orbitai.core.logging.FileLogger.i("ChatViewModel", "Agent exec (stdin+pipe)", "exit=${result.exitCode} output=${result.output.take(2000)}")
                     }
 
                     // If stdin also failed, try direct argument (no -p)
                     if (result.exitCode != 0 || result.output.isBlank()) {
                         fullCmd = "$envExports $runCmd \"$escaped\"$dangerouslySkip"
-                        result = termuxRuntime.executeInTermux(fullCmd, "")
+                        result = termuxRuntime.executeInTermuxStreamed(fullCmd, "") { line ->
+                            _streamLines.value = _streamLines.value + line
+                        }
                         com.orbitai.core.logging.FileLogger.i("ChatViewModel", "Agent exec (direct arg)", "exit=${result.exitCode} output=${result.output.take(2000)}")
                     }
 
@@ -386,7 +437,7 @@ class ChatViewModel(
                     val displayContent = if (!allFailed) {
                         result.output
                     } else {
-                        val bestError = listOf(result.output, firstResult.output)
+                        val bestError = listOf(result.output)
                             .firstOrNull { it.isNotBlank() }
                             ?.trim()
                         if (bestError != null) {
@@ -404,6 +455,8 @@ class ChatViewModel(
                         timestamp = System.currentTimeMillis()
                     )
                     repository.insertMessage(modelMsg)
+                    _showTranscript.value = false
+                    _streamLines.value = emptyList()
                 } catch (e: Exception) {
                     com.orbitai.core.logging.FileLogger.e("ChatViewModel", "Agent exec failed", e, "reason=${e.message}")
                     val errMsg = Message(
@@ -451,6 +504,161 @@ class ChatViewModel(
             loopApiKey = apiKey
 
             continueAiLoop()
+        }
+    }
+
+    private val slashHandler = object : com.orbitai.core.commands.SlashCommandHandler {
+        override fun postSystemMessage(text: String) {
+            val session = _currentSession.value ?: return
+            viewModelScope.launch(exceptionHandler) {
+                repository.insertMessage(
+                    Message(
+                        id = UUID.randomUUID().toString(),
+                        sessionId = session.id,
+                        role = MessageRole.TOOL,
+                        content = text,
+                        timestamp = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+
+        override fun triggerUpdate() {
+            viewModelScope.launch(exceptionHandler) {
+                runUpdateCheck()
+            }
+        }
+
+        override fun clearSession() {
+            val session = _currentSession.value ?: return
+            viewModelScope.launch(exceptionHandler) {
+                repository.deleteMessagesForSession(session.id)
+                _messages.value = emptyList()
+                postSystemMessage("Session cleared.")
+            }
+        }
+
+        override fun openSkills() {
+            onNavigateToSkills?.invoke()
+        }
+    }
+
+    private fun handleSlashCommand(raw: String) {
+        val parts = raw.trim().removePrefix("/").split(" ", limit = 2)
+        val name = parts[0].lowercase()
+        val arg = parts.getOrNull(1) ?: ""
+        val cmd = com.orbitai.core.commands.ChatSlashCommands.ALL.find { it.name == name }
+        if (cmd == null) {
+            slashHandler.postSystemMessage("Unknown command: /$name. Type / for a list.")
+            return
+        }
+        if (cmd.immediate) {
+            val handled = com.orbitai.core.commands.ChatSlashCommands.execute(cmd, arg, slashHandler)
+            if (!handled) {
+                slashHandler.postSystemMessage("Command /$name is not executable here.")
+            }
+        } else {
+            // Non-immediate: insert into the conversation as a user note so the
+            // agent sees it (e.g. /btw use the style guide).
+            val session = _currentSession.value
+            if (session != null) {
+                viewModelScope.launch(exceptionHandler) {
+                    repository.insertMessage(
+                        Message(
+                            id = UUID.randomUUID().toString(),
+                            sessionId = session.id,
+                            role = MessageRole.USER,
+                            content = raw,
+                            timestamp = System.currentTimeMillis()
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    /** Minimal update check used by the /update slash command. Mirrors the
+     *  DashboardScreen flow but posts results as chat messages. */
+    private suspend fun runUpdateCheck() {
+        val context = termuxRuntime.appContext
+        val flavor = when {
+            com.orbitai.BuildConfig.APPLICATION_ID.endsWith(".openclaude") -> "openclaude"
+            com.orbitai.BuildConfig.APPLICATION_ID.endsWith(".opencode") -> "opencode"
+            com.orbitai.BuildConfig.APPLICATION_ID.endsWith(".claudecode") -> "claudecode"
+            com.orbitai.BuildConfig.APPLICATION_ID.endsWith(".codex") -> "codex"
+            else -> "normal"
+        }
+        try {
+            val client = okhttp3.OkHttpClient.Builder()
+                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+            val apiResp = client.newCall(
+                okhttp3.Request.Builder()
+                    .url("https://api.github.com/repos/TheOneWhoSpeaksJanna/Orbit-AI/releases/latest")
+                    .build()
+            ).execute()
+            if (!apiResp.isSuccessful) {
+                slashHandler.postSystemMessage("Couldn't reach the update server (HTTP ${apiResp.code}).")
+                return
+            }
+            val json = org.json.JSONObject(apiResp.body?.string().orEmpty())
+            val tag = json.optString("tag_name", "")
+            val assets = json.optJSONArray("assets") ?: org.json.JSONArray()
+            var apkUrl: String? = null
+            for (i in 0 until assets.length()) {
+                val a = assets.optJSONObject(i) ?: continue
+                val n = a.optString("name", "")
+                if (n.contains("orbit-ai-$flavor-debug", ignoreCase = true) && n.endsWith(".apk", ignoreCase = true)) {
+                    apkUrl = a.optString("browser_download_url", "")
+                    break
+                }
+            }
+            if (apkUrl.isNullOrBlank()) {
+                slashHandler.postSystemMessage("No update found for this flavor.")
+                return
+            }
+            val latestRun = tag.substringAfter('v').toIntOrNull()
+            val currentRun = com.orbitai.BuildConfig.VERSION_NAME.substringAfterLast('-').toIntOrNull()
+            if (latestRun != null && currentRun != null && latestRun <= currentRun) {
+                slashHandler.postSystemMessage("Already on the latest version ($tag).")
+                return
+            }
+            slashHandler.postSystemMessage("Downloading update $tag…")
+            val dlResp = client.newCall(okhttp3.Request.Builder().url(apkUrl).build()).execute()
+            if (!dlResp.isSuccessful) {
+                slashHandler.postSystemMessage("Download failed (HTTP ${dlResp.code}).")
+                return
+            }
+            val outDir = java.io.File(context.cacheDir, "updates")
+            outDir.mkdirs()
+            val apkFile = java.io.File(outDir, "orbit_update.apk")
+            dlResp.body?.byteStream()?.use { input -> apkFile.outputStream().use { out -> input.copyTo(out) } }
+            if (!silentUpdater.canSilentInstall()) {
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context, "${context.packageName}.fileprovider", apkFile
+                )
+                slashHandler.postSystemMessage("New version downloaded — tap Install to update.")
+                try {
+                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "application/vnd.android.package-archive")
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                } catch (e: Exception) {
+                    slashHandler.postSystemMessage("Couldn't open installer: ${e.message}")
+                }
+            } else {
+                when (val res = silentUpdater.installApk(apkFile)) {
+                    is com.orbitai.data.local.updater.SilentUpdater.UpdateResult.Success ->
+                        slashHandler.postSystemMessage("Updated successfully.")
+                    is com.orbitai.data.local.updater.SilentUpdater.UpdateResult.Failure ->
+                        slashHandler.postSystemMessage("Update failed: ${res.reason}")
+                    else -> slashHandler.postSystemMessage("Update finished.")
+                }
+            }
+        } catch (e: Exception) {
+            val reason = e.message?.takeIf { it.isNotBlank() } ?: "network error (couldn't reach GitHub)"
+            slashHandler.postSystemMessage("Couldn't check for updates — $reason")
         }
     }
 
@@ -630,7 +838,8 @@ class ChatViewModel(
                     application.container.localCommandRunner,
                     application.container.prefsManager,
                     application.container.openCodeRepository,
-                    application.container.termuxRuntime
+                    application.container.termuxRuntime,
+                    application.container.silentUpdater
                 ) as T
             }
         }
