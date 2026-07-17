@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import com.orbitai.ui.theme.staggeredEntrance
 
 private const val THEME_SYSTEM = "System"
@@ -75,6 +76,12 @@ fun SettingsScreen(
     val updateResult by viewModel.updateResult.collectAsState()
     val updateInstalling by viewModel.updateInstalling.collectAsState()
     val updateInstallResult by viewModel.updateInstallResult.collectAsState()
+    val isHermes = viewModel.isHermes
+    val gatewayConnections by viewModel.gatewayConnections.collectAsState(initial = emptyList())
+    var showGatewayDialog by remember { androidx.compose.runtime.mutableStateOf<Boolean>(false) }
+    var gwService by remember { androidx.compose.runtime.mutableStateOf<String>("WhatsApp") }
+    var gwEndpoint by remember { androidx.compose.runtime.mutableStateOf<String>("") }
+    var gwToken by remember { androidx.compose.runtime.mutableStateOf<String>("") }
     val ctx = androidx.compose.ui.platform.LocalContext.current
 
     var editSkill by remember { mutableStateOf<Skill?>(null) }
@@ -257,6 +264,120 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+            }
+
+            // ── Gateway connections (Hermes edition only) ──────────────
+            if (isHermes) {
+                OrbitCard(
+                    tonal = true,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "Gateway Connections",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Connect Hermes to external chats (WhatsApp, Discord, Telegram, or a custom webhook).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (gatewayConnections.isEmpty()) {
+                            Text(
+                                "No connections yet.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            gatewayConnections.forEach { c ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(c.service, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            c.endpoint.ifBlank { "(no endpoint)" },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    OrbitButton(
+                                        onClick = { viewModel.removeGatewayConnection(c.id) },
+                                        variant = OrbitButtonVariant.Outlined
+                                    ) { Text("Remove") }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OrbitButton(
+                            onClick = { showGatewayDialog = true },
+                            variant = OrbitButtonVariant.Primary
+                        ) { Text("Add connection") }
+                    }
+                }
+
+                if (showGatewayDialog) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { showGatewayDialog = false },
+                        confirmButton = {
+                            OrbitButton(
+                                onClick = {
+                                    if (gwEndpoint.isNotBlank()) {
+                                        viewModel.addGatewayConnection(gwService, gwEndpoint, gwToken)
+                                        showGatewayDialog = false
+                                        gwEndpoint = ""
+                                        gwToken = ""
+                                    }
+                                },
+                                variant = OrbitButtonVariant.Primary
+                            ) { Text("Connect") }
+                        },
+                        dismissButton = {
+                            OrbitButton(onClick = { showGatewayDialog = false }, variant = OrbitButtonVariant.Outlined) { Text("Cancel") }
+                        },
+                        title = { Text("Add Gateway") },
+                        text = {
+                            Column {
+                                Text("Service", style = MaterialTheme.typography.bodySmall)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                androidx.compose.foundation.lazy.LazyRow(
+                                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                                ) {
+                                    items(listOf("WhatsApp", "Discord", "Telegram", "Custom")) { s ->
+                                        val selected = s == gwService
+                                        OrbitButton(
+                                            onClick = { gwService = s },
+                                            variant = if (selected) OrbitButtonVariant.Primary else OrbitButtonVariant.Outlined
+                                        ) { Text(s) }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                androidx.compose.material3.OutlinedTextField(
+                                    value = gwEndpoint,
+                                    onValueChange = { gwEndpoint = it },
+                                    label = { Text(if (gwService == "Custom") "Webhook URL" else "Phone / Server / Channel") },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                androidx.compose.material3.OutlinedTextField(
+                                    value = gwToken,
+                                    onValueChange = { gwToken = it },
+                                    label = { Text("Token (optional)") },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    )
                 }
             }
 

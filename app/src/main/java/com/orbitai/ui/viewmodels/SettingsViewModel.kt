@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
 private const val THEME_DEFAULT = "system"
@@ -185,6 +186,35 @@ class SettingsViewModel(
     fun updateSkillContent(skillId: String, content: String) {
         viewModelScope.launch(exceptionHandler) {
             repository.updateSkillContent(skillId, content)
+        }
+    }
+
+    // ── Gateway connections (Hermes edition only) ──────────────
+    val isHermes: Boolean = com.orbitai.core.config.FlavorConfig.isHermes
+
+    private val _gatewayConnections =
+        prefsManager.getGatewayConnections()
+    val gatewayConnections: Flow<List<com.orbitai.data.local.prefs.PreferencesManager.GatewayConnection>> =
+        _gatewayConnections
+
+    fun addGatewayConnection(
+        service: String,
+        endpoint: String,
+        token: String = ""
+    ) {
+        viewModelScope.launch(exceptionHandler) {
+            val id = java.util.UUID.randomUUID().toString()
+            prefsManager.addGatewayConnection(
+                com.orbitai.data.local.prefs.PreferencesManager.GatewayConnection(
+                    id, service, endpoint, token
+                )
+            )
+        }
+    }
+
+    fun removeGatewayConnection(id: String) {
+        viewModelScope.launch(exceptionHandler) {
+            prefsManager.removeGatewayConnection(id)
         }
     }
 

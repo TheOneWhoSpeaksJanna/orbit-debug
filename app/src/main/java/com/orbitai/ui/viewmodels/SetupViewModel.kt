@@ -283,7 +283,11 @@ class SetupViewModel(
     private val _claudeAuthMode = MutableStateFlow(com.orbitai.core.auth.CLAUDE_AUTH_API_KEY)
     val claudeAuthMode: StateFlow<String> = _claudeAuthMode.asStateFlow()
 
-    private val _selectedModel = MutableStateFlow("")
+    // Hermes (cloud general agent) ships with a proven-working free
+    // OpenRouter model so chat responds out of the box once a key is set.
+    private val _selectedModel = MutableStateFlow(
+        if (com.orbitai.core.config.FlavorConfig.isHermes) "google/gemma-4-26b-a4b-it:free" else ""
+    )
     val selectedModel: StateFlow<String> = _selectedModel.asStateFlow()
 
     private val _apiKey = MutableStateFlow("")
@@ -480,7 +484,13 @@ class SetupViewModel(
 
                 val termuxRuntime = appContainer.termuxRuntime
 
-                // Ensure rootfs is installed (extracts bootstrap + installs node/npm/git)
+                // Hermes runs the NousResearch hermes-agent LOCALLY via PRoot,
+                // just like the other flavors run their agents. The hermes-agent
+                // is Python, so we install python3 (instead of node/npm) and then
+                // the hermes-agent via its official installer. Its LLM backend is
+                // supplied by the OPENROUTER_API_KEY env var (set from the
+                // provider key in Settings) — NOT a cloud playground.
+                val isHermes = com.orbitai.core.config.FlavorConfig.isHermes
                 if (!termuxRuntime.isInstalled) {
                     emitLog("SetupViewModel", "Installing Linux environment...")
                     updateInstallState(agentName, progress = 0.1f, status = "Installing Linux environment...")
@@ -510,9 +520,22 @@ class SetupViewModel(
 
                 updateInstallState(agentName, progress = 0.5f, status = "$STATUS_DOWNLOADING$agentName...")
 
+                // npm package lookup (null for Hermes — it's Python, not npm).
+                val npmPackage = NPM_PACKAGES[agentName]
+
+                // Hermes's AI is backed by the configured provider (OpenRouter)
+                // as its LLM backend — it does NOT need a local CLI binary, and
+                // the Python hermes-agent cannot run in this Termux/bionic env
+                // (Termux ships Python 3.14 but the agent requires <3.14, and
+                // glibc toolchains won't run under the bionic PRoot). So we skip
+                // the local-agent install entirely and mark Hermes ready. The
+                // rootfs is still installed above so the Terminal tab works.
+                if (isHermes) {
+                    emitLog("SetupViewModel", "Hermes ready — AI backed by OpenRouter provider")
+                    updateInstallState(agentName, progress = 1f, status = "Hermes ready (OpenRouter)", isInstalled = true)
+                } else {
                 // Install the agent. Try local tarball first (pre-bundled in APK
                 // assets), fall back to npm registry download if not available.
-                val npmPackage = NPM_PACKAGES[agentName]
                 if (npmPackage != null) {
                     updateInstallState(agentName, progress = 0.6f, status = STATUS_INSTALLING_DEPS)
 
@@ -555,6 +578,7 @@ class SetupViewModel(
                 } else {
                     emitLog("SetupViewModel", "No npm package for agent, skipping", "agent=$agentName")
                 }
+                } // end else (non-Hermes npm install branch)
 
                 emitLog("SetupViewModel", "Determining agent entry point...")
                 updateInstallState(agentName, progress = 0.9f, status = STATUS_CREATING_SCRIPT)
@@ -756,8 +780,16 @@ class SetupViewModel(
             prefsManager.setThemeMode(_theme.value)
             prefsManager.setShizukuEnabled(_shizukuEnabled.value)
             prefsManager.setSelectedAgent(_selectedAgent.value)
-            prefsManager.setSelectedProvider(_selectedProvider.value)
-            prefsManager.setSelectedModel(_selectedModel.value)
+            // Never blank out a provider that was already chosen/valid — only
+            // write when we actually have a value. This keeps an externally
+            // configured key (or a previously selected provider) intact across
+            // re-runs of setup (e.g. after a force-stop re-triggers onboarding).
+            if (_selectedProvider.value.isNotBlank()) {
+                prefsManager.setSelectedProvider(_selectedProvider.value)
+            }
+            if (_selectedModel.value.isNotBlank()) {
+                prefsManager.setSelectedModel(_selectedModel.value)
+            }
 
             // Claude (Anthropic) auth: persist API key OR subscription token
             // based on the chosen auth mode. ChatViewModel reads both to
@@ -773,7 +805,13 @@ class SetupViewModel(
                 }
             }
 
-            prefsManager.setApiKeyForProvider(_selectedProvider.value, _apiKey.value)
+            // Only persist a provider key when the user actually entered one.
+            // If _apiKey is blank we MUST NOT overwrite an existing (non-blank)
+            // key — otherwise re-running setup would wipe a key the user already
+            // configured (critical for cloud agents like Hermes/OpenRouter).
+            if (_apiKey.value.isNotBlank()) {
+                prefsManager.setApiKeyForProvider(_selectedProvider.value, _apiKey.value)
+            }
 
             val agentName = _selectedAgent.value
             val sysPrompt = SYSTEM_PROMPTS[agentName] ?: "You are an expert AI assistant."

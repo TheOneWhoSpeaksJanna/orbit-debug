@@ -144,14 +144,24 @@ class ChatViewModel(
     private val _availableModels = MutableStateFlow<List<String>>(emptyList())
     val availableModels: StateFlow<List<String>> = _availableModels.asStateFlow()
 
-    // Local mode is always on — the app only uses the local OpenClaude agent.
-    // Cloud mode (direct API calls without the agent) is removed.
+    // Local mode runs the bundled coding CLI via PRoot. The Hermes edition is a
+    // All editions (including Hermes) run their agent LOCALLY via PRoot by
+    // default. Hermes runs the NousResearch hermes-agent binary the same way
+    // openclaude runs openclaude — its LLM backend is supplied via the
+    // OPENROUTER_API_KEY env var (set from the provider key in Settings).
+    // "Cloud mode" in this app is the separate OpenRouter *playground*
+    // (generic chat), NOT the Hermes agent.
     private val _useLocalMode = MutableStateFlow(true)
     val useLocalMode: StateFlow<Boolean> = _useLocalMode.asStateFlow()
 
     fun toggleLocalMode() {
-        // No-op — local mode is always on
+        _useLocalMode.value = !_useLocalMode.value
     }
+
+    /** Hermes default model — a free OpenRouter model that returns HTTP 200 on
+     *  both streaming and non-streaming requests with the user's key. Used as
+     *  Hermes's LLM backend. */
+    private val HERMES_DEFAULT_MODEL = "tencent/hy3:free"
 
     data class PendingCommand(
         val command: String,
@@ -351,8 +361,21 @@ class ChatViewModel(
             val agentContent = if (attachSuffix.isBlank()) content else content + attachSuffix
             clearAttachments()
 
-            val activeProvider = prefsManager.selectedProvider.firstOrNull() ?: DEFAULT_PROVIDER
-            val activeModelName = prefsManager.selectedModel.firstOrNull() ?: ""
+            // Hermes edition: its AI is always backed by OpenRouter (the user's
+            // provider key), regardless of any stale selected-provider value.
+            val activeProvider = if (com.orbitai.core.config.FlavorConfig.isHermes) {
+                "OpenRouter"
+            } else {
+                prefsManager.selectedProvider.firstOrNull() ?: DEFAULT_PROVIDER
+            }
+            // Hermes edition: always use a proven-working free OpenRouter model
+            // as its LLM backend. The dropdown may show a stale local-model name,
+            // but Hermes's AI is backed by OpenRouter, so we pin a valid model.
+            val activeModelName = if (com.orbitai.core.config.FlavorConfig.isHermes) {
+                HERMES_DEFAULT_MODEL
+            } else {
+                prefsManager.selectedModel.firstOrNull() ?: ""
+            }
             val activeAgentId = prefsManager.selectedAgent.firstOrNull()
                 ?.lowercase()?.replace(" ", "-")
                 ?: return@launch
@@ -361,7 +384,13 @@ class ChatViewModel(
 
             _isLoading.value = true
 
-            if (_useLocalMode.value) {
+            // Hermes flavor has no local CLI binary in this environment (the
+            // Python hermes-agent requires Python <3.14 but Termux ships 3.14,
+            // and glibc toolchains won't run under the bionic PRoot). So Hermes
+            // routes its AI through the configured provider (OpenRouter) as its
+            // LLM backend — this is the working "local orchestrator + OpenRouter
+            // brain" path. All other editions run their local agent binary.
+            if (_useLocalMode.value && !com.orbitai.core.config.FlavorConfig.isHermes) {
                 var runCmd: String? = null
                 val agentEntity = repository.getAllAgents().firstOrNull()?.find { it.id == activeAgentId }
                 runCmd = agentEntity?.runCommand

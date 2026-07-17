@@ -451,11 +451,14 @@ fun ProviderSelectionStep(viewModel: SetupViewModel) {
         val all = com.orbitai.data.local.runtime.ProviderCatalog.loadForAgent(context, activeAgent).map { it.name }
         // OpenRouter is a universal gateway that is NOT an official provider for
         // Claude Code or Codex. Only surface it first on the broad agents
-        // (OpenClaude / OpenCode / normal-default); for Claude Code / Codex we
-        // respect the agent's own (official) provider list and do not inject it.
+        // (OpenClaude / OpenCode / Hermes / normal-default); for Claude Code /
+        // Codex we respect the agent's own (official) provider list and do not
+        // inject it. Hermes is a cloud-only agent that talks to OpenRouter, so
+        // OpenRouter must be selectable (and shown first) for it.
         val forceOpenRouter = com.orbitai.core.config.FlavorConfig.presetAgentName.isBlank() ||
             activeAgent.equals("OpenClaude", ignoreCase = true) ||
-            activeAgent.equals("OpenCode", ignoreCase = true)
+            activeAgent.equals("OpenCode", ignoreCase = true) ||
+            activeAgent.equals("Hermes", ignoreCase = true)
         if (forceOpenRouter) listOf("OpenRouter") + all.filter { it != "OpenRouter" }
         else all
     }
@@ -464,9 +467,12 @@ fun ProviderSelectionStep(viewModel: SetupViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.Center
+            .verticalScroll(rememberScrollState())
     ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.Top
+        ) {
         Text(
             stringResource(R.string.select_provider_for, agent),
             style = MaterialTheme.typography.headlineMedium,
@@ -609,6 +615,7 @@ fun ProviderSelectionStep(viewModel: SetupViewModel) {
                     overflow = TextOverflow.Ellipsis
                 )
             }
+        }
         }
     }
 }

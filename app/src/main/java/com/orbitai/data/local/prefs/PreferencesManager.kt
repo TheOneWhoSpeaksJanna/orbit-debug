@@ -373,4 +373,54 @@ class PreferencesManager(private val context: Context) {
             prefs.remove(DOWNLOAD_VERSION)
         }
     }
+
+    // ── Gateway connections (Hermes edition) ───────────────────────────
+    // Lets the user wire external chat gateways (WhatsApp, Discord, Telegram,
+    // or a custom webhook) so Hermes can be reached from outside the app.
+    // Stored as a JSON array under a single DataStore key.
+    val GATEWAY_CONNECTIONS = stringPreferencesKey("gateway_connections")
+
+    data class GatewayConnection(
+        val id: String,
+        val service: String,   // WhatsApp | Discord | Telegram | Custom
+        val endpoint: String,  // phone / server URL / webhook
+        val token: String = ""
+    ) {
+        fun toJson(): String =
+            """{"id":"$id","service":"$service","endpoint":"$endpoint","token":"$token"}"""
+    }
+
+    fun getGatewayConnections(): Flow<List<GatewayConnection>> =
+        context.dataStore.data.map { prefs ->
+            prefs[GATEWAY_CONNECTIONS]?.let { parseGateways(it) } ?: emptyList()
+        }
+
+    suspend fun addGatewayConnection(c: GatewayConnection) {
+        context.dataStore.edit { prefs ->
+            val list = prefs[GATEWAY_CONNECTIONS]?.let { parseGateways(it) } ?: emptyList()
+            prefs[GATEWAY_CONNECTIONS] = (list + c).joinToString(",") { it.toJson() }
+        }
+    }
+
+    suspend fun removeGatewayConnection(id: String) {
+        context.dataStore.edit { prefs ->
+            val list = prefs[GATEWAY_CONNECTIONS]?.let { parseGateways(it) } ?: emptyList()
+            prefs[GATEWAY_CONNECTIONS] = list.filter { it.id != id }
+                .joinToString(",") { it.toJson() }
+        }
+    }
+
+    private fun parseGateways(raw: String): List<GatewayConnection> {
+        if (raw.isBlank()) return emptyList()
+        return raw.split("},").mapNotNull { part ->
+            val seg = if (part.endsWith("}")) part else "$part}"
+            runCatching {
+                val id = seg.substringAfter("\"id\":\"").substringBefore("\"")
+                val service = seg.substringAfter("\"service\":\"").substringBefore("\"")
+                val endpoint = seg.substringAfter("\"endpoint\":\"").substringBefore("\"")
+                val token = seg.substringAfter("\"token\":\"").substringBefore("\"")
+                GatewayConnection(id, service, endpoint, token)
+            }.getOrNull()
+        }
+    }
 }

@@ -30,6 +30,8 @@ const val CLAUDE_AUTH_SUBSCRIPTION = "subscription"
 fun defaultProviderForAgent(agentName: String): String? = when (agentName) {
     "Codex" -> "OpenAI"
     "Claude Code" -> "Anthropic Claude"
+    // Hermes is a cloud-only general agent that uses OpenRouter directly.
+    "Hermes" -> "OpenRouter"
     else -> null
 }
 

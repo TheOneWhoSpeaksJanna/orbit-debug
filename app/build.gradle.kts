@@ -64,6 +64,18 @@ android {
       buildConfigField("String", "AGENT_FALLBACK_REPO_URL", "\"\"")
       manifestPlaceholders["appLabel"] = "Orbit + Codex"
     }
+    create("hermes") {
+      dimension = "agent"
+      applicationId = "Orbit.hermes"
+      versionNameSuffix = "-hermes"
+      buildConfigField("String", "FLAVOR_PRESET_AGENT_ID", "\"hermes\"")
+      buildConfigField("String", "FLAVOR_PRESET_AGENT_NAME", "\"Hermes\"")
+      buildConfigField("String", "FLAVOR_APP_LABEL", "\"Orbit + Hermes\"")
+      // Hermes is a CLOUD-ONLY general AI agent (no local coding CLI).
+      // It talks to OpenRouter directly; no rootfs/npm agent install needed.
+      buildConfigField("String", "AGENT_FALLBACK_REPO_URL", "\"\"")
+      manifestPlaceholders["appLabel"] = "Orbit + Hermes"
+    }
   }
 
   defaultConfig {
