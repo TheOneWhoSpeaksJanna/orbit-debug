@@ -38,3 +38,4 @@ app/src/*/assets/openclaude.tgz
 # certificate, otherwise update-installs fail with "already existing package"
 # due to signature mismatch.
 service-account.json
+version-info.json
