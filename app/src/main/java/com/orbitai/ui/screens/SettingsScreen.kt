@@ -71,6 +71,11 @@ fun SettingsScreen(
     val agentRulesAsk by viewModel.agentRulesAsk.collectAsState()
     val agentRulesDenied by viewModel.agentRulesDenied.collectAsState()
     val skills by viewModel.skills.collectAsState()
+    val updateChecking by viewModel.updateChecking.collectAsState()
+    val updateResult by viewModel.updateResult.collectAsState()
+    val updateInstalling by viewModel.updateInstalling.collectAsState()
+    val updateInstallResult by viewModel.updateInstallResult.collectAsState()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
 
     var editSkill by remember { mutableStateOf<Skill?>(null) }
     var editContent by remember { mutableStateOf("") }
@@ -170,6 +175,86 @@ fun SettingsScreen(
                         val custom = viewModel.custom.collectAsState().value
                         CustomColorEditor(custom = custom) { slot, color ->
                             viewModel.updateCustomColor(slot, color)
+                        }
+                    }
+                }
+            }
+
+            // ── Update system card ──────────────────────────────────────
+            OrbitCard(
+                tonal = true,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "App Update",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Version ${viewModel.appVersion}  (build ${viewModel.appVersionCode})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OrbitButton(
+                        onClick = { viewModel.checkForUpdate() },
+                        enabled = !updateChecking && !updateInstalling,
+                        variant = OrbitButtonVariant.Primary
+                    ) {
+                        Text(if (updateChecking) "Checking…" else "Check for updates")
+                    }
+
+                    // Result of the check
+                    updateResult?.let { res ->
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            res.message.ifBlank { (if (res.available) "Update available" else "Up to date") },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (res.available) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (res.available && res.apkUrl != null) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OrbitButton(
+                                onClick = { viewModel.installUpdate(res.apkUrl) },
+                                enabled = !updateInstalling,
+                                variant = OrbitButtonVariant.Primary
+                            ) {
+                                Text(if (updateInstalling) "Downloading & installing…" else "Download & install ${res.tag}")
+                            }
+                        }
+                    }
+
+                    // Result of the install
+                    updateInstallResult?.let { res ->
+                        Spacer(modifier = Modifier.height(10.dp))
+                        when (res) {
+                            is com.orbitai.data.local.updater.UpdateInstallResult.Success ->
+                                Text("Updated successfully — restarting…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                            is com.orbitai.data.local.updater.UpdateInstallResult.Failure ->
+                                Text("Update failed: ${res.reason}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                            is com.orbitai.data.local.updater.UpdateInstallResult.NeedsManualInstall -> {
+                                Text("Tap to finish installing in the system installer.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OrbitButton(
+                                    onClick = {
+                                        try {
+                                            ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                                setDataAndType(res.apkUri, "application/vnd.android.package-archive")
+                                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            })
+                                        } catch (e: Exception) {
+                                            android.widget.Toast.makeText(ctx, "Couldn't open installer: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    variant = OrbitButtonVariant.Primary
+                                ) { Text("Open installer") }
+                            }
                         }
                     }
                 }

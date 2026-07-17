@@ -70,7 +70,18 @@ android {
     applicationId = "Orbit.app"
     minSdk = 24
     targetSdk = 36
-    versionCode = 13
+    // versionCode is AUTO-BUMPED from the build timestamp so every release is
+    // strictly newer than the last. This is CRITICAL: Android's package manager
+    // refuses to upgrade an APK whose versionCode is not greater than the
+    // installed one. A hardcoded versionCode (old behaviour) meant updates
+    // were silently rejected as "not an upgrade", forcing users to
+    // uninstall/reinstall to get bug fixes.
+    //
+    // We use seconds since a fixed base epoch (2024-01-01) to stay well within
+    // Android's int range (< 2_100_000_000) for decades of headroom.
+    val EPOCH_BASE = 1_704_067_200L // 2024-01-01T00:00:00Z in seconds
+    val buildTs = ((System.currentTimeMillis() / 1000L) - EPOCH_BASE).toInt()
+    versionCode = buildTs
     versionName = "1.11"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -203,6 +214,37 @@ android {
       // Attach to this variant's asset merge task
       tasks.matching { it.name == "merge${capitalizedVariant}Assets" }.configureEach {
         dependsOn(downloadTask)
+      }
+
+      // ── Emit version-info.json into assets for the updater ─────────
+      // The UpdateManager reads this from each GitHub release to decide
+      // precisely whether a newer build exists (exact versionCode per
+      // flavor). The versionCode matches the auto-bumped defaultConfig
+      // value so BuildConfig.VERSION_CODE and this file agree.
+      val versionInfoTask = tasks.register("emitVersionInfo${capitalizedVariant}") {
+        val outFile = projectDir.resolve("src/$flavorName/assets/version-info.json")
+        outputs.file(outFile)
+        doLast {
+          val epochBase = 1_704_067_200L
+          val vc = ((System.currentTimeMillis() / 1000L) - epochBase).toInt()
+          val info = """
+          {
+            "tag": "v$vc",
+            "flavors": {
+              "normal":     { "versionCode": $vc, "apk": "app-normal-debug.apk" },
+              "openclaude": { "versionCode": $vc, "apk": "app-openclaude-debug.apk" },
+              "opencode":   { "versionCode": $vc, "apk": "app-opencode-debug.apk" },
+              "claudecode": { "versionCode": $vc, "apk": "app-claudecode-debug.apk" },
+              "codex":      { "versionCode": $vc, "apk": "app-codex-debug.apk" }
+            }
+          }
+          """.trimIndent()
+          outFile.parentFile.mkdirs()
+          outFile.writeText(info)
+        }
+      }
+      tasks.matching { it.name == "merge${capitalizedVariant}Assets" }.configureEach {
+        dependsOn(versionInfoTask)
       }
 
       // ── Pre-bundle OpenClaude npm tarball ──────────────────────────

@@ -24,7 +24,8 @@ private const val THEME_DEFAULT = "system"
 
 class SettingsViewModel(
     private val prefsManager: PreferencesManager,
-    private val repository: OrbitAiRepository
+    private val repository: OrbitAiRepository,
+    private val updateManager: com.orbitai.data.local.updater.UpdateManager
 ) : ViewModel() {
     private val exceptionHandler = CoroutineExceptionHandlerFactory.create("SettingsViewModel")
 
@@ -54,10 +55,57 @@ class SettingsViewModel(
     val skills: StateFlow<List<Skill>> = _skills.asStateFlow()
 
     val appVersion: String = BuildConfig.VERSION_NAME.substringBeforeLast('-')
+    val appVersionCode: Int = BuildConfig.VERSION_CODE
+
+    // ── Update system state ──────────────────────────────────────────────
+    private val _updateChecking = MutableStateFlow(false)
+    val updateChecking: StateFlow<Boolean> = _updateChecking.asStateFlow()
+
+    private val _updateResult =
+        MutableStateFlow<com.orbitai.data.local.updater.UpdateCheckResult?>(null)
+    val updateResult: StateFlow<com.orbitai.data.local.updater.UpdateCheckResult?> =
+        _updateResult.asStateFlow()
+
+    private val _updateInstalling = MutableStateFlow(false)
+    val updateInstalling: StateFlow<Boolean> = _updateInstalling.asStateFlow()
+
+    private val _updateInstallResult =
+        MutableStateFlow<com.orbitai.data.local.updater.UpdateInstallResult?>(null)
+    val updateInstallResult: StateFlow<com.orbitai.data.local.updater.UpdateInstallResult?> =
+        _updateInstallResult.asStateFlow()
 
     init {
         loadSettings()
         loadSkills()
+    }
+
+    fun checkForUpdate() {
+        if (_updateChecking.value) return
+        _updateChecking.value = true
+        _updateResult.value = null
+        viewModelScope.launch(exceptionHandler) {
+            _updateResult.value = updateManager.checkForUpdate()
+            _updateChecking.value = false
+        }
+    }
+
+    fun installUpdate(apkUrl: String) {
+        if (_updateInstalling.value) return
+        _updateInstalling.value = true
+        _updateInstallResult.value = null
+        viewModelScope.launch(exceptionHandler) {
+            val res = updateManager.downloadAndInstall(apkUrl)
+            _updateInstalling.value = false
+            _updateInstallResult.value = res
+            if (res is com.orbitai.data.local.updater.UpdateInstallResult.Success) {
+                updateManager.restartApp()
+            }
+        }
+    }
+
+    fun clearUpdateState() {
+        _updateResult.value = null
+        _updateInstallResult.value = null
     }
 
     private fun loadSettings() {
@@ -145,9 +193,15 @@ class SettingsViewModel(
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
                 val application = checkNotNull(extras[APPLICATION_KEY]) as OrbitAiApplication
+                val container = application.container
                 return SettingsViewModel(
-                    application.container.prefsManager,
-                    application.container.repository
+                    container.prefsManager,
+                    container.repository,
+                    com.orbitai.data.local.updater.UpdateManager(
+                        container.appContext,
+                        container.okHttpClient,
+                        container.silentUpdater
+                    )
                 ) as T
             }
         }

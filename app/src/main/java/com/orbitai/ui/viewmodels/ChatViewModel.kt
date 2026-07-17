@@ -673,83 +673,42 @@ class ChatViewModel(
         }
     }
 
-    /** Minimal update check used by the /update slash command. Mirrors the
-     *  DashboardScreen flow but posts results as chat messages. */
+    /** Minimal update check used by the /update slash command. Delegates to
+     *  the shared UpdateManager so the "already up to date" gate and the
+     *  install path are identical to Settings/Dashboard. */
     private suspend fun runUpdateCheck() {
         val context = termuxRuntime.appContext
-        val flavor = when {
-            com.orbitai.BuildConfig.APPLICATION_ID.endsWith(".openclaude") -> "openclaude"
-            com.orbitai.BuildConfig.APPLICATION_ID.endsWith(".opencode") -> "opencode"
-            com.orbitai.BuildConfig.APPLICATION_ID.endsWith(".claudecode") -> "claudecode"
-            com.orbitai.BuildConfig.APPLICATION_ID.endsWith(".codex") -> "codex"
-            else -> "normal"
-        }
+        val container = (context.applicationContext as com.orbitai.OrbitAiApplication).container
+        val manager = com.orbitai.data.local.updater.UpdateManager(
+            container.appContext,
+            container.okHttpClient,
+            container.silentUpdater
+        )
         try {
-            val client = okhttp3.OkHttpClient.Builder()
-                .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                .build()
-            val apiResp = client.newCall(
-                okhttp3.Request.Builder()
-                    .url("https://api.github.com/repos/TheOneWhoSpeaksJanna/Orbit-AI/releases/latest")
-                    .build()
-            ).execute()
-            if (!apiResp.isSuccessful) {
-                slashHandler.postSystemMessage("Couldn't reach the update server (HTTP ${apiResp.code}).")
+            val check = manager.checkForUpdate()
+            if (!check.available || check.apkUrl == null) {
+                slashHandler.postSystemMessage(check.message.ifBlank { "Already on the latest version." })
                 return
             }
-            val json = org.json.JSONObject(apiResp.body?.string().orEmpty())
-            val tag = json.optString("tag_name", "")
-            val assets = json.optJSONArray("assets") ?: org.json.JSONArray()
-            var apkUrl: String? = null
-            for (i in 0 until assets.length()) {
-                val a = assets.optJSONObject(i) ?: continue
-                val n = a.optString("name", "")
-                if (n.contains("orbit-ai-$flavor-debug", ignoreCase = true) && n.endsWith(".apk", ignoreCase = true)) {
-                    apkUrl = a.optString("browser_download_url", "")
-                    break
+            slashHandler.postSystemMessage("Downloading update ${check.tag}…")
+            when (val res = manager.downloadAndInstall(check.apkUrl)) {
+                is com.orbitai.data.local.updater.UpdateInstallResult.Success -> {
+                    slashHandler.postSystemMessage("Updated successfully — restarting…")
+                    manager.restartApp()
                 }
-            }
-            if (apkUrl.isNullOrBlank()) {
-                slashHandler.postSystemMessage("No update found for this flavor.")
-                return
-            }
-            val latestRun = tag.substringAfter('v').toIntOrNull()
-            val currentRun = com.orbitai.BuildConfig.VERSION_NAME.substringAfterLast('-').toIntOrNull()
-            if (latestRun != null && currentRun != null && latestRun <= currentRun) {
-                slashHandler.postSystemMessage("Already on the latest version ($tag).")
-                return
-            }
-            slashHandler.postSystemMessage("Downloading update $tag…")
-            val dlResp = client.newCall(okhttp3.Request.Builder().url(apkUrl).build()).execute()
-            if (!dlResp.isSuccessful) {
-                slashHandler.postSystemMessage("Download failed (HTTP ${dlResp.code}).")
-                return
-            }
-            val outDir = java.io.File(context.cacheDir, "updates")
-            outDir.mkdirs()
-            val apkFile = java.io.File(outDir, "orbit_update.apk")
-            dlResp.body?.byteStream()?.use { input -> apkFile.outputStream().use { out -> input.copyTo(out) } }
-            if (!silentUpdater.canSilentInstall()) {
-                val uri = androidx.core.content.FileProvider.getUriForFile(
-                    context, "${context.packageName}.fileprovider", apkFile
-                )
-                slashHandler.postSystemMessage("New version downloaded — tap Install to update.")
-                try {
-                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                        setDataAndType(uri, "application/vnd.android.package-archive")
-                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                    })
-                } catch (e: Exception) {
-                    slashHandler.postSystemMessage("Couldn't open installer: ${e.message}")
-                }
-            } else {
-                when (val res = silentUpdater.installApk(apkFile)) {
-                    is com.orbitai.data.local.updater.SilentUpdater.UpdateResult.Success ->
-                        slashHandler.postSystemMessage("Updated successfully.")
-                    is com.orbitai.data.local.updater.SilentUpdater.UpdateResult.Failure ->
-                        slashHandler.postSystemMessage("Update failed: ${res.reason}")
-                    else -> slashHandler.postSystemMessage("Update finished.")
+                is com.orbitai.data.local.updater.UpdateInstallResult.Failure ->
+                    slashHandler.postSystemMessage("Update failed: ${res.reason}")
+                is com.orbitai.data.local.updater.UpdateInstallResult.NeedsManualInstall -> {
+                    slashHandler.postSystemMessage("New version downloaded — tap Install to update.")
+                    try {
+                        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                            setDataAndType(res.apkUri, "application/vnd.android.package-archive")
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        })
+                    } catch (e: Exception) {
+                        slashHandler.postSystemMessage("Couldn't open installer: ${e.message}")
+                    }
                 }
             }
         } catch (e: Exception) {

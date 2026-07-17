@@ -19,6 +19,7 @@ import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
 interface AppContainer {
+    val appContext: Context
     val repository: OrbitAiRepository
     val prefsManager: PreferencesManager
     val aiProvider: AiProvider
@@ -33,6 +34,7 @@ interface AppContainer {
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
+    override val appContext: Context get() = context
     private val database: OrbitAiDatabase by lazy {
         Room.databaseBuilder(context, OrbitAiDatabase::class.java, DATABASE_NAME)
             .fallbackToDestructiveMigration()

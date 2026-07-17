@@ -406,76 +406,30 @@ private suspend fun runSilentUpdate(
     context: android.content.Context,
     container: AppContainer
 ): SilentUpdater.UpdateResult {
-    val flavor = when {
-        BuildConfig.APPLICATION_ID.endsWith(".openclaude") -> "openclaude"
-        BuildConfig.APPLICATION_ID.endsWith(".opencode") -> "opencode"
-        BuildConfig.APPLICATION_ID.endsWith(".claudecode") -> "claudecode"
-        BuildConfig.APPLICATION_ID.endsWith(".codex") -> "codex"
-        else -> "normal"
+    val manager = com.orbitai.data.local.updater.UpdateManager(
+        container.appContext,
+        container.okHttpClient,
+        container.silentUpdater
+    )
+    // 1) Decide if an update is actually available (uses the release's
+    //    version-info.json + the auto-bumped BuildConfig.VERSION_CODE, so the
+    //    "already up to date" gate is correct and updates always replace
+    //    installed (buggy) code instead of being rejected as not-an-upgrade).
+    val check = manager.checkForUpdate()
+    if (!check.available || check.apkUrl == null) {
+        return SilentUpdater.UpdateResult.Failure(
+            check.message.ifBlank { "Already on the latest version." }
+        )
     }
-    val client = container.okHttpClient
-    return try {
-        val apiReq = okhttp3.Request.Builder()
-            .url("https://api.github.com/repos/TheOneWhoSpeaksJanna/Orbit-AI/releases/latest")
-            .build()
-        val apiResp = client.newCall(apiReq).execute()
-        if (!apiResp.isSuccessful) {
-            return SilentUpdater.UpdateResult.Failure("Couldn't reach the update server (HTTP ${apiResp.code}).")
+    // 2) Download + install (in-place, keeps user data).
+    return when (val res = manager.downloadAndInstall(check.apkUrl)) {
+        is com.orbitai.data.local.updater.UpdateInstallResult.Success -> {
+            manager.restartApp()
+            SilentUpdater.UpdateResult.Success
         }
-        val bodyStr = apiResp.body?.string().orEmpty()
-
-        // Parse the JSON properly (was a brittle regex before).
-        val json = org.json.JSONObject(bodyStr)
-        val tag = json.optString("tag_name", "")
-        val assets = json.optJSONArray("assets") ?: org.json.JSONArray()
-        var apkUrl: String? = null
-        for (i in 0 until assets.length()) {
-            val a = assets.optJSONObject(i) ?: continue
-            val name = a.optString("name", "")
-            if (name.contains("orbit-ai-$flavor-debug", ignoreCase = true) &&
-                name.endsWith(".apk", ignoreCase = true)
-            ) {
-                apkUrl = a.optString("browser_download_url", "")
-                break
-            }
-        }
-        apkUrl = apkUrl?.takeIf { it.isNotBlank() }
-            ?: return SilentUpdater.UpdateResult.Failure("No APK asset found for flavor '$flavor'.")
-
-        // Already on the latest published version? Compare run-number tag.
-        val currentRun = BuildConfig.VERSION_NAME.substringAfterLast('-').toIntOrNull()
-        val latestRun = tag.substringAfter('v').toIntOrNull()
-        if (latestRun != null && currentRun != null && latestRun <= currentRun) {
-            return SilentUpdater.UpdateResult.Failure("Already on the latest version ($tag).")
-        }
-
-        val dlReq = okhttp3.Request.Builder().url(apkUrl).build()
-        val dlResp = client.newCall(dlReq).execute()
-        if (!dlResp.isSuccessful) {
-            return SilentUpdater.UpdateResult.Failure("Download failed: ${dlResp.code}")
-        }
-
-        // Stage in the FileProvider-shared cache dir (file_paths.xml: updates/).
-        val outDir = java.io.File(context.cacheDir, "updates")
-        outDir.mkdirs()
-        val apkFile = java.io.File(outDir, "orbit_update.apk")
-        dlResp.body?.byteStream()?.use { input ->
-            apkFile.outputStream().use { out -> input.copyTo(out) }
-        }
-
-        if (!container.silentUpdater.canSilentInstall()) {
-            // No Shizuku — hand off to the system installer via FileProvider.
-            val uri = androidx.core.content.FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                apkFile
-            )
-            return SilentUpdater.UpdateResult.NeedsManualInstall(uri)
-        }
-        container.silentUpdater.installApk(apkFile)
-    } catch (e: Exception) {
-        val reason = e.message?.takeIf { it.isNotBlank() }
-            ?: "network error (couldn't reach GitHub)"
-        SilentUpdater.UpdateResult.Failure("Couldn't check for updates — $reason")
+        is com.orbitai.data.local.updater.UpdateInstallResult.Failure ->
+            SilentUpdater.UpdateResult.Failure(res.reason)
+        is com.orbitai.data.local.updater.UpdateInstallResult.NeedsManualInstall ->
+            SilentUpdater.UpdateResult.NeedsManualInstall(res.apkUri)
     }
 }
