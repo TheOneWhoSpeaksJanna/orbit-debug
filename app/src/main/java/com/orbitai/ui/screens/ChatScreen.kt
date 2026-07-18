@@ -620,6 +620,9 @@ private fun TranscriptBlock(
     expanded: Boolean,
     onToggleExpand: () -> Unit
 ) {
+    // Cap to the last 300 lines so very long agent runs don't allocate
+    // thousands of Text widgets. The transcript is an aid, not an archive.
+    val shown = if (lines.size > 300) lines.takeLast(300) else lines
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -650,11 +653,10 @@ private fun TranscriptBlock(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(Modifier.weight(1f))
-                    Icon(
-                        if (expanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    Text(
+                        if (expanded) "▴" else "▾",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 AnimatedVisibility(
@@ -662,9 +664,21 @@ private fun TranscriptBlock(
                     enter = fadeIn() + expandVertically(),
                     exit = fadeOut() + shrinkVertically()
                 ) {
-                    Column(modifier = Modifier.padding(top = 8.dp)) {
-                        val shown = if (lines.size > 200) lines.takeLast(200) else lines
-                        shown.forEach { line ->
+                    // Windowed rendering: only the visible lines are composed,
+                    // keyed by index so recomposition is cheap as lines stream in.
+                    val transcriptState = rememberLazyListState()
+                    LaunchedEffect(shown.size) {
+                        if (shown.isNotEmpty()) transcriptState.scrollToItem(shown.lastIndex)
+                    }
+                    LazyColumn(
+                        state = transcriptState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp)
+                            .padding(top = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
+                        items(shown, key = { it.hashCode() + shown.indexOf(it) }) { line ->
                             Text(
                                 line,
                                 style = MaterialTheme.typography.bodySmall,
@@ -674,12 +688,13 @@ private fun TranscriptBlock(
                                 modifier = Modifier.padding(vertical = 1.dp)
                             )
                         }
-                        // live cursor
-                        Text(
-                            "▌",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        item {
+                            Text(
+                                "▌",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             }
