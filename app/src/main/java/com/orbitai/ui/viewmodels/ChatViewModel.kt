@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlin.text.RegexOption
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -137,7 +138,14 @@ class ChatViewModel(
                     safe.matches(Regex(".*\\.(pdf)$", RegexOption.IGNORE_CASE)) -> "PDF"
                     else -> "file"
                 }
-                lines.append("- $kind: $insideBase/$outName\n")
+                // Tell the agent HOW to consume each kind so it actually uses
+                // the bytes (e.g. route images through vision, not text).
+                val guidance = when (kind) {
+                    "image" -> "This is an IMAGE — use your vision/multimodal capability to look at it and answer about its contents. Do NOT describe it from the filename; read the actual pixels from disk."
+                    "PDF" -> "This is a PDF document — read and analyze its text/contents from disk."
+                    else -> "This is a file — read its contents from disk."
+                }
+                lines.append("- $kind: $insideBase/$outName\n  $guidance\n")
             } catch (e: Exception) {
                 copyFailed = true
                 com.orbitai.core.logging.FileLogger.w(
