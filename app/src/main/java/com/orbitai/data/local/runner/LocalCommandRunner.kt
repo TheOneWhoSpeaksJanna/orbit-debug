@@ -46,7 +46,14 @@ class LocalCommandRunner(
         if (busyboxPath != null) {
             return listOf(busyboxPath, "sh", "-c", command)
         }
-        return listOf("sh", "-c", command)
+        // Fallback: use the system shell. On most devices /system/bin/sh exists
+        // and can run ordinary commands (ls, cat, echo, id, am, pm, ...).
+        // Without this fallback the privileged (Shizuku) path fails with
+        // "BusyBox unavailable -> exit 127" on flavors that don't bundle
+        // libbusybox.so (e.g. openclaude). Busybox is only needed for its
+        // extended applet set; plain command execution works with the OS shell.
+        val sysSh = "${android.system.Os.getenv("ANDROID_ROOT") ?: "/system"}/bin/sh"
+        return listOf(sysSh, "-c", command)
     }
 
     /**

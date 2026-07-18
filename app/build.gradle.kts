@@ -175,10 +175,17 @@ android {
     }
   }
 
-  // Prevent AAPT2 from decompressing the Termux bootstrap zip, .deb files,
-  // and the openclaude npm tarball.
+  // Prevent AAPT2 from re-compressing assets that are ALREADY compressed
+  // archives AND that the app reads via context.assets.open() + a stream
+  // decoder (ZipInputStream / raw copy). The old list ("zip","deb","tgz")
+  // forced AAPT2 to STORE these already-gzip-compressed files verbatim inside
+  // the APK, bloating every flavor by ~120 MB (CLI) / 30 MB (shared) with no
+  // benefit — ZipInputStream and asset streams read compressed entries fine.
+  // We now let AAPT2 compress them. Keep "tgz" out of noCompress too for the
+  // same reason (openclaude.tgz is read via a stream, not mmap).
+  // See SIZE_REDUCTION_REPORT.md (fix #1).
   androidResources {
-    noCompress += listOf("zip", "deb", "tgz")
+    noCompress += listOf()
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
 

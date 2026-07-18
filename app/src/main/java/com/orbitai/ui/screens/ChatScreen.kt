@@ -142,7 +142,10 @@ fun ChatScreen(
         viewModel.fetchDetailedModels()
         if (sessionId.isNullOrEmpty()) {
             if (viewModel.currentSession.value == null) {
-                viewModel.startNewSession(null)
+                // Resume the most-recent session (or create one) instead of
+                // always spawning a new "New Session". This prevents orphan
+                // sessions piling up in History every time the Chat tab opens.
+                viewModel.resumeOrCreateSession()
             } else {
                 viewModel.loadSession(viewModel.currentSession.value!!.id)
             }
@@ -406,13 +409,14 @@ fun ChatScreen(
                             IconButton(
                                 onClick = {
                                     if ((inputText.isNotBlank() || attachments.isNotEmpty()) && !isLoading) {
-                                        val toSend = buildString {
-                                            if (attachments.isNotEmpty()) {
-                                                append(attachments.joinToString(", ") { "📎 ${it.displayName}" })
-                                                if (inputText.isNotBlank()) append("\n")
-                                            }
-                                            append(inputText.trim())
-                                        }
+                                        // Send ONLY the user's text. Attachment
+                                        // files are copied to the agent's rootfs
+                                        // and described to the model inside
+                                        // prepareAttachmentsForAgent() — we must
+                                        // NOT inject the file name as chat text,
+                                        // or the model only "sees" a filename
+                                        // (the old fake-attachment bug).
+                                        val toSend = inputText.trim()
                                         viewModel.sendMessage(toSend)
                                         inputText = ""
                                         viewModel.clearAttachments()

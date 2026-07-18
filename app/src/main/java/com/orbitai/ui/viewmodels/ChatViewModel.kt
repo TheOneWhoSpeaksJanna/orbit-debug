@@ -104,15 +104,27 @@ class ChatViewModel(
         val items = _attachments.value
         if (items.isEmpty()) return ""
         val ctx = termuxRuntime.appContext
-        // Inside-rootfs path the agent sees; host path we copy into.
-        val hostDir = java.io.File(termuxRuntime.homeDir, "attachments")
+        // Copy attachments into the rootfs the ACTIVE agent actually sees.
+        // openclaude/opencode/claudecode/codex run under TermuxRuntime's rootfs;
+        // Hermes runs under its own glibc rootfs at a different path. The
+        // hardcoded /data/data/com.termux/... path was wrong for Hermes, so
+        // the agent could never find the file (the "fake attachment" bug).
+        val hostDir: java.io.File
+        val insideBase: String
+        if (com.orbitai.core.config.FlavorConfig.isHermes) {
+            val hr = com.orbitai.data.local.runtime.HermesRuntime(ctx)
+            hostDir = java.io.File(hr.rootfsDir, "home/attachments")
+            insideBase = "/home/attachments"
+        } else {
+            hostDir = java.io.File(termuxRuntime.homeDir, "attachments")
+            insideBase = "/data/data/com.termux/files/home/attachments"
+        }
         hostDir.mkdirs()
-        val insideBase = "/data/data/com.termux/files/home/attachments"
         val lines = StringBuilder("\n\n--- Attached files (read them from disk) ---\n")
+        var copyFailed = false
         for ((idx, item) in items.withIndex()) {
             try {
                 val uri = android.net.Uri.parse(item.uri)
-                // sanitise name, keep extension
                 val safe = item.displayName.replace(Regex("[^A-Za-z0-9._-]"), "_")
                 val outName = "${idx}_$safe"
                 val outFile = java.io.File(hostDir, outName)
@@ -127,10 +139,17 @@ class ChatViewModel(
                 }
                 lines.append("- $kind: $insideBase/$outName\n")
             } catch (e: Exception) {
-                com.orbitai.core.logging.FileLogger.w("ChatViewModel", "Attachment copy failed", "name=${item.displayName} err=${e.message}")
+                copyFailed = true
+                com.orbitai.core.logging.FileLogger.w(
+                    "ChatViewModel", "Attachment copy failed",
+                    "name=${item.displayName} err=${e.message}"
+                )
             }
         }
         lines.append("--- end attachments ---\n")
+        if (copyFailed) {
+            lines.append("(Note: one or more attachments could not be read from the picker.)\n")
+        }
         return lines.toString()
     }
 
@@ -327,9 +346,30 @@ class ChatViewModel(
                 createdAt = System.currentTimeMillis(),
                 updatedAt = System.currentTimeMillis()
             )
+            // Persist immediately so re-entering the Chat tab resumes THIS
+            // session instead of spawning a fresh "New Session" every time.
+            repository.insertSession(session)
             _currentSession.value = session
             _messages.value = emptyList()
             loadSession(session.id)
+        }
+    }
+
+    /**
+     * Resume the most-recent existing session, or create one if there are
+     * none. This is what the Chat tab calls on open so we never multiply
+     * empty sessions in the background (the old bug: every open called
+     * startNewSession, so History filled with orphan "New Session" rows).
+     */
+    fun resumeOrCreateSession() {
+        viewModelScope.launch(exceptionHandler) {
+            val existing = repository.getAllSessions().firstOrNull()?.firstOrNull()
+            if (existing != null) {
+                _currentSession.value = existing
+                loadSession(existing.id)
+            } else {
+                startNewSession(null)
+            }
         }
     }
 
@@ -370,8 +410,10 @@ class ChatViewModel(
 
         val session = _currentSession.value ?: return
         viewModelScope.launch(exceptionHandler) {
-            // Persist session on first message (blank sessions never hit the DB)
-            repository.insertSession(session)
+            // Session is already persisted (startNewSession / resumeOrCreateSession
+            // inserts it up-front). Do NOT re-insert here — re-inserting with
+            // REPLACE is harmless for the row but was the source of confusion;
+            // we skip it so we never create duplicate session entities.
 
             val userMsg = Message(
                 id = UUID.randomUUID().toString(),

@@ -135,7 +135,9 @@ fun AppShell() {
                             BottomNavTab.CHAT -> ChatScreen(
                                 sessionId = targetSessionId,
                                 onNavigateBack = {
-                                    targetSessionId = null
+                                    // Keep the active session id so returning to
+                                    // Chat resumes it (don't null it — that was
+                                    // what spawned a fresh session every visit).
                                     selectedTab = BottomNavTab.HOME
                                 },
                                 onSessionIdResolved = { id ->
