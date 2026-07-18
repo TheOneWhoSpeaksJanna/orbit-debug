@@ -73,17 +73,17 @@ class TermuxViewModel(
                 }
             }
 
-            // Headless equivalent of `termux-setup-storage`: expose
-            // /storage/emulated/0 inside the Termux HOME so the AI can
-            // write outside its sandbox (e.g. /storage/emulated/0/Download).
-            // Run this EVERY time the terminal is used (not just on first
-            // install) — the rootfs is normally pre-installed by the Setup
-            // Wizard, so gating it behind !isInstalled would skip it entirely
-            // and leave ~/storage absent. It is idempotent (deletes + recreates
-            // the symlinks), so re-running is cheap and safe.
-            StorageSetup.createStorageSymlinks(termuxRuntime.homeDir)
-
-            val executionResult = termuxRuntime.executeInTermux(trimmed, "")
+            val executionResult = if (com.orbitai.core.config.FlavorConfig.isHermes) {
+                val hermesRuntime = appContainer.hermesRuntime
+                if (!hermesRuntime.isInstalled) {
+                    hermesRuntime.install { _, _ -> }
+                }
+                StorageSetup.createStorageSymlinks(hermesRuntime.rootfsDir)
+                hermesRuntime.execute(trimmed, "")
+            } else {
+                StorageSetup.createStorageSymlinks(termuxRuntime.homeDir)
+                termuxRuntime.executeInTermux(trimmed, "")
+            }
             val log = TermuxLog(
                 id = java.util.UUID.randomUUID().toString(),
                 command = trimmed,

@@ -71,8 +71,11 @@ android {
       buildConfigField("String", "FLAVOR_PRESET_AGENT_ID", "\"hermes\"")
       buildConfigField("String", "FLAVOR_PRESET_AGENT_NAME", "\"Hermes\"")
       buildConfigField("String", "FLAVOR_APP_LABEL", "\"Orbit + Hermes\"")
-      // Hermes is a CLOUD-ONLY general AI agent (no local coding CLI).
-      // It talks to OpenRouter directly; no rootfs/npm agent install needed.
+      // Hermes runs the REAL Nous hermes-agent (Python) locally inside a
+      // glibc Debian aarch64 PRoot rootfs bundled as a flavor asset
+      // (src/hermes/assets/hermes-rootfs.tar.gz). The OpenRouter key is the
+      // LLM backend; the agent process itself runs on-device.
+      buildConfigField("boolean", "FLAVOR_HERMES_LOCAL_AGENT", "true")
       buildConfigField("String", "AGENT_FALLBACK_REPO_URL", "\"\"")
       manifestPlaceholders["appLabel"] = "Orbit + Hermes"
     }
@@ -205,27 +208,32 @@ android {
   // Only agent flavors (openclaude, opencode, claudecode, codex) bundle
   // the ~120 MB of .debs. This task is best-effort: if the download
   // fails, TermuxRuntime falls back to apt install at runtime.
-  val agentFlavorSet = setOf("openclaude", "opencode", "claudecode", "codex")
+  val agentFlavorSet = setOf("openclaude", "opencode", "claudecode", "codex", "hermes")
+  // Hermes does NOT use the Termux .deb toolchain (it ships a glibc rootfs
+  // instead), so the offline-debs download only applies to the 4 CLI agents.
+  val debFlavorSet = setOf("openclaude", "opencode", "claudecode", "codex")
   androidComponents {
     onVariants { variant ->
       val flavorName = variant.flavorName ?: return@onVariants
       if (flavorName !in agentFlavorSet) return@onVariants
 
+      // offline-debs only for the CLI-agent flavors (not Hermes)
       val capitalizedVariant = variant.name.replaceFirstChar { it.uppercase() }
-      val downloadTaskName = "downloadOfflinePackages$capitalizedVariant"
-      val downloadTask = tasks.register<Exec>(downloadTaskName) {
-        val script = rootProject.projectDir.resolve("scripts/download-offline-packages.py")
-        val outputDir = projectDir.resolve("src/$flavorName/assets/offline-debs")
-        commandLine("python3", script.absolutePath, outputDir.absolutePath)
-        outputs.dir(outputDir)
-        doFirst {
-          outputDir.mkdirs()
-        }
-      }
 
-      // Attach to this variant's asset merge task
-      tasks.matching { it.name == "merge${capitalizedVariant}Assets" }.configureEach {
-        dependsOn(downloadTask)
+      if (flavorName in debFlavorSet) {
+        val downloadTaskName = "downloadOfflinePackages$capitalizedVariant"
+        val downloadTask = tasks.register<Exec>(downloadTaskName) {
+          val script = rootProject.projectDir.resolve("scripts/download-offline-packages.py")
+          val outputDir = projectDir.resolve("src/$flavorName/assets/offline-debs")
+          commandLine("python3", script.absolutePath, outputDir.absolutePath)
+          outputs.dir(outputDir)
+          doFirst {
+            outputDir.mkdirs()
+          }
+        }
+        tasks.matching { it.name == "merge${capitalizedVariant}Assets" }.configureEach {
+          dependsOn(downloadTask)
+        }
       }
 
       // ── Emit version-info.json into assets for the updater ─────────
@@ -247,7 +255,8 @@ android {
               "openclaude": { "versionCode": $vc, "apk": "app-openclaude-debug.apk" },
               "opencode":   { "versionCode": $vc, "apk": "app-opencode-debug.apk" },
               "claudecode": { "versionCode": $vc, "apk": "app-claudecode-debug.apk" },
-              "codex":      { "versionCode": $vc, "apk": "app-codex-debug.apk" }
+              "codex":      { "versionCode": $vc, "apk": "app-codex-debug.apk" },
+              "hermes":     { "versionCode": $vc, "apk": "app-hermes-debug.apk" }
             }
           }
           """.trimIndent()

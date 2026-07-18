@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.orbitai.OrbitAiApplication
 import com.orbitai.core.logging.CoroutineExceptionHandlerFactory
+import com.orbitai.core.config.FlavorConfig
 import com.orbitai.data.local.runner.LocalCommandRunner
 import com.orbitai.data.local.prefs.PreferencesManager
 import com.orbitai.data.local.runtime.TermuxRuntime
@@ -49,6 +50,7 @@ class ChatViewModel(
     private val prefsManager: PreferencesManager,
     private val openCodeRepository: OpenCodeRepository,
     private val termuxRuntime: TermuxRuntime,
+    private val hermesRuntime: com.orbitai.data.local.runtime.HermesRuntime,
     private val silentUpdater: com.orbitai.data.local.updater.SilentUpdater
 ) : ViewModel() {
     private val exceptionHandler = CoroutineExceptionHandlerFactory.create("ChatViewModel")
@@ -331,6 +333,31 @@ class ChatViewModel(
         }
     }
 
+    // ── Test/debug hook ────────────────────────────────────────────────
+    // Lets a harness drive a real chat send without relying on soft-keyboard
+    // text entry (which is unreliable on some emulators).Send:
+    //   am broadcast -a com.orbitai.TEST_SEND --es prompt "your message"
+    // This calls the exact same sendMessage() path the UI uses, so it fully
+    // exercises ChatViewModel -> HermesRuntime.runAgent -> UI render.
+    private val testReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(ctx: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action == "com.orbitai.TEST_SEND") {
+                val p = intent.getStringExtra("prompt") ?: return
+                com.orbitai.core.logging.FileLogger.i("ChatViewModel", "testReceiver got prompt", "len=${p.length}")
+                if (com.orbitai.core.config.FlavorConfig.isHermes) {
+                    viewModelScope.launch(exceptionHandler) { sendMessage(p) }
+                }
+            }
+        }
+    }
+
+    init {
+        val c = termuxRuntime.appContext
+        val filter = android.content.IntentFilter("com.orbitai.TEST_SEND")
+        c.registerReceiver(testReceiver, filter, android.content.Context.RECEIVER_EXPORTED)
+        com.orbitai.core.logging.FileLogger.i("ChatViewModel", "testReceiver registered")
+    }
+
     fun sendMessage(content: String) {
         val text = content.trim()
         if (text.isEmpty()) return
@@ -360,6 +387,60 @@ class ChatViewModel(
             val attachSuffix = prepareAttachmentsForAgent()
             val agentContent = if (attachSuffix.isBlank()) content else content + attachSuffix
             clearAttachments()
+
+            // ── Hermes edition: run the REAL local hermes-agent on-device ──
+            // The agent (LLM reasoning + tool calls + shell) runs inside the
+            // glibc Debian PRoot rootfs. OpenRouter is only the LLM backend.
+            // This is NOT an OpenRouter chat shim — the agent process is real.
+            if (com.orbitai.core.config.FlavorConfig.isHermes) {
+                _isLoading.value = true
+                _streamLines.value = emptyList()
+                _showTranscript.value = true
+                val apiKey = prefsManager.getApiKeyForProvider("OpenRouter").firstOrNull() ?: ""
+                val model = HERMES_DEFAULT_MODEL
+                if (apiKey.isBlank()) {
+                    val errMsg = Message(
+                        id = UUID.randomUUID().toString(),
+                        sessionId = session.id,
+                        role = MessageRole.MODEL,
+                        content = "No OpenRouter API key configured. Open the Provider tab, tap the pencil on OpenRouter, paste your key, and tap Save.",
+                        timestamp = System.currentTimeMillis()
+                    )
+                    repository.insertMessage(errMsg)
+                    _isLoading.value = false
+                    _showTranscript.value = false
+                    return@launch
+                }
+                if (!hermesRuntime.isInstalled) {
+                    val errMsg = Message(
+                        id = UUID.randomUUID().toString(),
+                        sessionId = session.id,
+                        role = MessageRole.MODEL,
+                        content = "The Hermes local runtime is not installed yet. Go to Setup Wizard and complete setup first.",
+                        timestamp = System.currentTimeMillis()
+                    )
+                    repository.insertMessage(errMsg)
+                    _isLoading.value = false
+                    _showTranscript.value = false
+                    return@launch
+                }
+                val output = hermesRuntime.runAgent(agentContent, apiKey, model) { line ->
+                    _streamLines.value = _streamLines.value + line
+                }
+                com.orbitai.core.logging.FileLogger.i("ChatViewModel", "Hermes agent run done", "outLen=${output.length}")
+                val modelMsg = Message(
+                    id = UUID.randomUUID().toString(),
+                    sessionId = session.id,
+                    role = MessageRole.MODEL,
+                    content = if (output.isNotBlank()) output else "(Hermes returned no output)",
+                    timestamp = System.currentTimeMillis()
+                )
+                repository.insertMessage(modelMsg)
+                _showTranscript.value = false
+                _streamLines.value = emptyList()
+                _isLoading.value = false
+                return@launch
+            }
 
             // Hermes edition: its AI is always backed by OpenRouter (the user's
             // provider key), regardless of any stale selected-provider value.
@@ -1018,6 +1099,7 @@ class ChatViewModel(
                     application.container.prefsManager,
                     application.container.openCodeRepository,
                     application.container.termuxRuntime,
+                    application.container.hermesRuntime,
                     application.container.silentUpdater
                 ) as T
             }

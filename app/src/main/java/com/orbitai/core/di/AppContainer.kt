@@ -27,6 +27,7 @@ interface AppContainer {
     val localCommandRunner: LocalCommandRunner
     val runtimeManager: com.orbitai.data.local.runtime.OrbitAiRuntimeManager
     val termuxRuntime: com.orbitai.data.local.runtime.TermuxRuntime
+    val hermesRuntime: com.orbitai.data.local.runtime.HermesRuntime
     val silentUpdater: SilentUpdater
     val toolCallRecorder: ToolCallRecorder
     val openCodeRepository: OpenCodeRepository
@@ -72,6 +73,9 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val termuxRuntime: com.orbitai.data.local.runtime.TermuxRuntime by lazy {
         com.orbitai.data.local.runtime.TermuxRuntime(context)
+    }
+    override val hermesRuntime: com.orbitai.data.local.runtime.HermesRuntime by lazy {
+        com.orbitai.data.local.runtime.HermesRuntime(context)
     }
 
     override val silentUpdater: SilentUpdater by lazy {

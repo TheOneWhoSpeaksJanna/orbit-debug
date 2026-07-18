@@ -483,56 +483,29 @@ class SetupViewModel(
                 updateInstallState(agentName, status = STATUS_CHECKING)
 
                 val termuxRuntime = appContainer.termuxRuntime
+                val hermesRuntime = appContainer.hermesRuntime
 
-                // Hermes runs the NousResearch hermes-agent LOCALLY via PRoot,
-                // just like the other flavors run their agents. The hermes-agent
-                // is Python, so we install python3 (instead of node/npm) and then
-                // the hermes-agent via its official installer. Its LLM backend is
-                // supplied by the OPENROUTER_API_KEY env var (set from the
-                // provider key in Settings) — NOT a cloud playground.
                 val isHermes = com.orbitai.core.config.FlavorConfig.isHermes
-                if (!termuxRuntime.isInstalled) {
-                    emitLog("SetupViewModel", "Installing Linux environment...")
-                    updateInstallState(agentName, progress = 0.1f, status = "Installing Linux environment...")
-                    val rootfsOk = termuxRuntime.install { progress, status ->
-                        emitLog("SetupViewModel", status, "progress=${(progress * 100).toInt()}%")
-                        updateInstallState(agentName, progress = progress * 0.5f, status = status)
-                    }
-                    if (!rootfsOk) {
-                        throw IllegalStateException("Failed to install Linux rootfs environment")
-                    }
-                    emitLog("SetupViewModel", "Linux environment ready")
-                } else {
-                    // Rootfs is already extracted, but tools (node/npm/git) might
-                    // be missing if apt failed on a previous run. Ensure they're
-                    // installed before trying npm install.
-                    emitLog("SetupViewModel", "Checking tools...")
-                    updateInstallState(agentName, progress = 0.3f, status = "Checking tools...")
-                    val toolsOk = termuxRuntime.ensureToolsInstalled { progress, status ->
-                        emitLog("SetupViewModel", status, "progress=${(progress * 100).toInt()}%")
-                        updateInstallState(agentName, progress = 0.3f + progress * 0.3f, status = status)
-                    }
-                    if (!toolsOk) {
-                        throw IllegalStateException("Failed to install nodejs/npm/git. Check logs.")
-                    }
-                    emitLog("SetupViewModel", "Tools ready", "node/npm/git installed")
-                }
-
-                updateInstallState(agentName, progress = 0.5f, status = "$STATUS_DOWNLOADING$agentName...")
-
-                // npm package lookup (null for Hermes — it's Python, not npm).
                 val npmPackage = NPM_PACKAGES[agentName]
 
-                // Hermes's AI is backed by the configured provider (OpenRouter)
-                // as its LLM backend — it does NOT need a local CLI binary, and
-                // the Python hermes-agent cannot run in this Termux/bionic env
-                // (Termux ships Python 3.14 but the agent requires <3.14, and
-                // glibc toolchains won't run under the bionic PRoot). So we skip
-                // the local-agent install entirely and mark Hermes ready. The
-                // rootfs is still installed above so the Terminal tab works.
+                // Hermes runs the REAL NousResearch hermes-agent locally inside a
+                // glibc Debian aarch64 PRoot rootfs (bundled asset). Extract it
+                // (the bionic Termux rootfs is NOT used for Hermes). The agent's
+                // LLM backend is OpenRouter, supplied via OPENROUTER_API_KEY.
                 if (isHermes) {
-                    emitLog("SetupViewModel", "Hermes ready — AI backed by OpenRouter provider")
-                    updateInstallState(agentName, progress = 1f, status = "Hermes ready (OpenRouter)", isInstalled = true)
+                    if (!hermesRuntime.isInstalled) {
+                        emitLog("SetupViewModel", "Extracting Hermes local agent runtime...")
+                        updateInstallState(agentName, progress = 0.5f, status = "Installing Hermes runtime...")
+                        val ok = hermesRuntime.install { progress, status ->
+                            emitLog("SetupViewModel", status, "progress=${(progress * 100).toInt()}%")
+                            updateInstallState(agentName, progress = 0.5f + progress * 0.45f, status = status)
+                        }
+                        if (!ok) {
+                            throw IllegalStateException("Failed to install Hermes local runtime")
+                        }
+                    }
+                    emitLog("SetupViewModel", "Hermes local agent ready — runs on-device via PRoot")
+                    updateInstallState(agentName, progress = 1f, status = "Hermes ready (local agent)", isInstalled = true)
                 } else {
                 // Install the agent. Try local tarball first (pre-bundled in APK
                 // assets), fall back to npm registry download if not available.
