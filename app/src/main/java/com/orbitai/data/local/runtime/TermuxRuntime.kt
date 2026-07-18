@@ -391,12 +391,19 @@ class TermuxRuntime(private val context: Context) {
         FileLogger.i(TAG, "pkg install result", "exit=${installResult.exitCode} time=${pkgDuration}ms output=${installResult.output.take(3000)}")
 
         if (installResult.exitCode != 0) {
-            FileLogger.e(TAG, "apt install failed", "exit=${installResult.exitCode}")
             val nodeCheck = File(binDir, "node")
-            if (!nodeCheck.exists()) {
-                FileLogger.e(TAG, "Node not found after install", "path=${nodeCheck.absolutePath}")
+            val npmCheck = File(binDir, "npm")
+            val gitCheck = File(binDir, "git")
+            if (!nodeCheck.exists() || !npmCheck.exists() || !gitCheck.exists()) {
+                FileLogger.e(TAG, "apt install failed and tools still missing",
+                    "exit=${installResult.exitCode} node=${nodeCheck.exists()} npm=${npmCheck.exists()} git=${gitCheck.exists()}")
                 return@withContext false
             }
+            // Tools are present (offline dpkg install succeeded even though the
+            // online apt fallback failed — e.g. no Termux repo reachable). Not
+            // a real failure, so don't emit a scary E line into the logs.
+            FileLogger.w(TAG, "apt install failed but tools already present (offline install ok)",
+                "exit=${installResult.exitCode}")
         }
 
         val npmCheck = File(binDir, "npm")
