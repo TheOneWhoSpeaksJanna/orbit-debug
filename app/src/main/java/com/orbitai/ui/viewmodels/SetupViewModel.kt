@@ -523,6 +523,11 @@ class SetupViewModel(
                 emitLog("SetupViewModel", "Ensuring Termux rootfs is installed before agent npm install")
                 termuxRuntime.install { progress, status ->
                     emitLog("SetupViewModel", "Rootfs install progress", "progress=${(progress * 100).toInt()}% status=$status")
+                    // Drive the visible progress bar from the real rootfs
+                    // extraction progress (0..1 -> 0..0.6 of the total bar).
+                    // Without this the bar sits at 0% for the whole (longest)
+                    // rootfs phase and only jumps at the next checkpoint.
+                    updateInstallState(agentName, progress = progress * 0.6f, status = status)
                 }
                 // Install the agent. Try local tarball first (pre-bundled in APK
                 // assets), fall back to npm registry download if not available.

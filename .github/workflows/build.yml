@@ -13,6 +13,12 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Build each flavor in its own parallel job so wall-clock time is
+        # ~one flavor's build, not six sequential ones.
+        flavor: [ normal, openclaude, codex, opencode, claudecode, hermes ]
 
     steps:
     - uses: actions/checkout@v4
@@ -45,33 +51,47 @@ jobs:
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v4
       with:
-        cache-read-only: ${{ github.event_name != 'push' }}
+        # Keep the daemon warm + reuse the build cache across steps/runners.
+        cache-encryption-key: ${{ secrets.GRADLE_CACHE_ENCRYPTION_KEY }}
 
-    - name: Build debug APKs (all flavors) + run tests
-      run: ./gradlew assembleDebug testNormalDebugUnitTest --no-daemon --parallel
+    - name: Build debug APK (${{ matrix.flavor }})
+      # No --no-daemon: the setup-gradle action manages a warm daemon + cache,
+      # which is far faster than a cold start per invocation.
+      run: ./gradlew assemble${{ matrix.flavor }}Debug --build-cache
 
-    - name: Collect APKs
+    - name: Run unit tests (normal only)
+      if: matrix.flavor == 'normal'
+      run: ./gradlew testNormalDebugUnitTest --build-cache
+
+    - name: Collect APK
       run: |
         mkdir -p release
-        for apk in app/build/outputs/apk/*/debug/*.apk; do
-          flavor=$(basename "$(dirname "$(dirname "$apk")")")
-          cp "$apk" "release/orbit-ai-${flavor}-debug-${{ github.run_number }}.apk"
-        done
-        if [ ! "$(ls -A release 2>/dev/null)" ]; then
-          cp app/build/outputs/apk/debug/*.apk release/ 2>/dev/null || true
-        fi
+        cp app/build/outputs/apk/${{ matrix.flavor }}/debug/*.apk "release/orbit-ai-${{ matrix.flavor }}-debug-${{ github.run_number }}.apk"
         ls -la release/
 
-    - name: Upload APK artifacts
+    - name: Upload APK artifact
       if: github.event_name == 'push'
       uses: actions/upload-artifact@v4
       with:
-        name: orbit-ai-apks-${{ github.run_number }}
+        name: orbit-ai-${{ matrix.flavor }}-apk-${{ github.run_number }}
         path: release/*.apk
         retention-days: 30
 
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Download all APKs
+      uses: actions/download-artifact@v4
+      with:
+        path: release
+        pattern: orbit-ai-*-apk-${{ github.run_number }}
+        merge-multiple: true
+    - name: List APKs
+      run: ls -la release/
     - name: Create Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ github.run_number }}
