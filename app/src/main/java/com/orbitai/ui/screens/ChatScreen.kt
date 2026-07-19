@@ -281,7 +281,14 @@ fun ChatScreen(
                     if (messages.isEmpty() && !isLoading && !showTranscript) {
                         item { WelcomePlaceholder() }
                     }
-                    items(messages, key = { it.id }) { message ->
+                    // Key by id+index so two messages can never collide on the
+                    // same LazyColumn key (would otherwise crash the transcript
+                    // the moment a streamed reply is appended).
+                    items(
+                        count = messages.size,
+                        key = { index -> "${messages[index].id}#$index" }
+                    ) { index ->
+                        val message = messages[index]
                         MessageBubble(
                             content = message.content,
                             isUser = message.role == MessageRole.USER,
@@ -678,7 +685,11 @@ private fun TranscriptBlock(
                             .padding(top = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(1.dp)
                     ) {
-                        items(shown, key = { it.hashCode() + shown.indexOf(it) }) { line ->
+                        items(
+                            count = shown.size,
+                            key = { index -> "${shown[index].hashCode()}#$index" }
+                        ) { index ->
+                            val line = shown[index]
                             Text(
                                 line,
                                 style = MaterialTheme.typography.bodySmall,
