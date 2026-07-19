@@ -16,6 +16,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        lfs: true
+
+    - name: Ensure Git LFS objects pulled
+      run: git lfs pull || git lfs fetch --all && git lfs checkout
 
     - name: Set up JDK 21
       uses: actions/setup-java@v4
