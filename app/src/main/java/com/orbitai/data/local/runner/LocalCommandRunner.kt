@@ -16,6 +16,12 @@ private const val SHIZUKU_API_CHANGED = "Shizuku API changed \u2014 newProcess m
 private const val SHIZUKU_PERMISSION_DENIED = "Shizuku permission denied. Grant permission in the Shizuku app."
 private const val ERROR_COMMAND_PREFIX = "Error executing local command: "
 private const val ERROR_PRIVILEGED_PREFIX = "Error executing privileged command via Shizuku: "
+// Termux/PRoot does NOT provide a real `sudo`. Elevated commands MUST go
+// through Shizuku (ristilled `rish` under the hood), which gives true
+// system-level (uid 0) access on the Android host. Running `sudo` inside
+// the PRoot rootfs is meaningless (it either errors or runs as the app's
+// own uid), so we never fall through to the unprivileged shell for it.
+val SUDO_PREFIX = "sudo "
 
 data class CommandResult(val output: String, val exitCode: Int, val command: String)
 
