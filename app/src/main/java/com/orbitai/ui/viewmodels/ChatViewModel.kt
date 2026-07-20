@@ -54,7 +54,8 @@ class ChatViewModel(
     private val openCodeRepository: OpenCodeRepository,
     private val termuxRuntime: TermuxRuntime,
     private val hermesRuntime: com.orbitai.data.local.runtime.HermesRuntime,
-    private val silentUpdater: com.orbitai.data.local.updater.SilentUpdater
+    private val silentUpdater: com.orbitai.data.local.updater.SilentUpdater,
+    private val toolCallRecorder: com.orbitai.core.di.ToolCallRecorder
 ) : ViewModel() {
     private val exceptionHandler = CoroutineExceptionHandlerFactory.create("ChatViewModel")
 
@@ -242,6 +243,13 @@ class ChatViewModel(
     }
 
     private suspend fun isCommandAllowed(cmd: String, isSudo: Boolean): PermissionResult {
+        // Hard safety floor: destructive / foot-gun commands are ALWAYS blocked,
+        // even when the permission level is FULL_ACCESS. A careless "Allow" must
+        // never be able to wipe the PRoot rootfs, brick storage symlinks, or open
+        // a remote shell.
+        if (com.orbitai.core.security.isDangerousCommand(cmd)) {
+            return PermissionResult.BLOCKED
+        }
         val level = AgentPermissionLevel.fromValue(prefsManager.agentPermissionLevel.firstOrNull() ?: "NORMAL")
         return when (level) {
             AgentPermissionLevel.FULL_ACCESS -> PermissionResult.ALLOWED
@@ -653,7 +661,7 @@ class ChatViewModel(
                     // Build env var exports based on the provider
                     // Most OpenAI-compatible agents accept OPENAI_API_KEY + OPENAI_BASE_URL
                     // OpenRouter specifically uses OPENROUTER_API_KEY
-                    val envExports = buildEnvExports(activeProvider, apiKey, model, useSubscription)
+                    val envExports = buildEnvExports(activeProvider, apiKey, model, useSubscription, thinkingLevel)
                     com.orbitai.core.logging.FileLogger.i("ChatViewModel", "Agent env", "provider=$activeProvider model=$model keyLen=${apiKey.length}")
 
                     com.orbitai.core.logging.FileLogger.i("ChatViewModel", "Agent exec start (PRoot, streamed)", "cmd=$runCmd content=${content.take(80)}")
@@ -885,6 +893,16 @@ class ChatViewModel(
             localCommandRunner.executeCommand(cmd)
         }
         val toolOutput = "Output: ${execResult.output}\nExitCode: ${execResult.exitCode}"
+
+        // Record the tool call so the Dashboard can surface what the agent ran.
+        toolCallRecorder.record(
+            com.orbitai.core.di.ToolCallRecord(
+                sessionId = loopSessionId,
+                command = if (isSudo) "sudo $cmd" else cmd,
+                output = execResult.output,
+                exitCode = execResult.exitCode
+            )
+        )
 
         repository.insertTermuxLog(
             TermuxLog(
@@ -1384,13 +1402,17 @@ class ChatViewModel(
             }
             else -> {
                 // OpenRouter-backed flavors (openclaude, opencode, and any
-                // openai-compatible agent routed via OpenRouter).
-                " --thinking enabled && export OPENROUTER_REASONING_EFFORT='$level'"
+                // openai-compatible agent routed via OpenRouter). The reasoning
+                // effort knob is an ENV var (OPENROUTER_REASONING_EFFORT), which
+                // buildEnvExports sets. We must NOT inline `&& export ...` here:
+                // that would be interpreted as CLI args after `--verbose` and
+                // silently break the command. So this branch returns no CLI flag.
+                ""
             }
         }
     }
 
-    private fun buildEnvExports(provider: String, apiKey: String, model: String, useSubscription: Boolean = false): String {
+    private fun buildEnvExports(provider: String, apiKey: String, model: String, useSubscription: Boolean = false, thinkingLevel: String = "auto"): String {
         if (apiKey.isBlank()) return ""
 
         val (coreExports, baseUrlSetByCore) = com.orbitai.core.auth.buildProviderEnvExports(
@@ -1425,6 +1447,16 @@ class ChatViewModel(
             }
         }
 
+        // OpenRouter-backed providers accept a reasoning-effort knob via the
+        // OPENROUTER_REASONING_EFFORT env var. This is the correct place to set
+        // it (part of the `export ... &&` chain), NOT inline in the CLI args,
+        // which would be parsed as flags and silently break the command.
+        if (provider.equals("OpenRouter", ignoreCase = true) &&
+            thinkingLevel.isNotBlank() && thinkingLevel != "auto"
+        ) {
+            exports.append(" && export OPENROUTER_REASONING_EFFORT='$thinkingLevel'")
+        }
+
         // Ensure the agent's Bash tool can find a POSIX shell inside PRoot. The
         // termux rootfs has usr/bin/{sh,bash} but no /bin/sh and no /etc/passwd
         // entry, so without SHELL set OpenClaude reports "No suitable shell found"
@@ -1452,7 +1484,8 @@ class ChatViewModel(
                     application.container.openCodeRepository,
                     application.container.termuxRuntime,
                     application.container.hermesRuntime,
-                    application.container.silentUpdater
+                    application.container.silentUpdater,
+                    application.container.toolCallRecorder
                 ) as T
             }
         }

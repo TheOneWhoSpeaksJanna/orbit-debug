@@ -2,9 +2,6 @@ package com.orbitai.core.di
 
 import android.content.Context
 import androidx.room.Room
-import com.orbitai.data.api.tools.ExecuteCommandTool
-import com.orbitai.data.api.tools.SudoCommandTool
-import com.orbitai.data.api.tools.ToolRegistry
 import com.orbitai.data.local.OrbitAiDatabase
 import com.orbitai.data.local.prefs.PreferencesManager
 import com.orbitai.data.local.runner.LocalCommandRunner
@@ -23,7 +20,6 @@ interface AppContainer {
     val repository: OrbitAiRepository
     val prefsManager: PreferencesManager
     val aiProvider: AiProvider
-    val toolRegistry: ToolRegistry
     val localCommandRunner: LocalCommandRunner
     val runtimeManager: com.orbitai.data.local.runtime.OrbitAiRuntimeManager
     val termuxRuntime: com.orbitai.data.local.runtime.TermuxRuntime
@@ -84,15 +80,6 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
 
     override val toolCallRecorder: ToolCallRecorder by lazy {
         ToolCallRecorder()
-    }
-
-    override val toolRegistry: ToolRegistry by lazy {
-        ToolRegistry(
-            listOf(
-                ExecuteCommandTool(localCommandRunner),
-                SudoCommandTool(localCommandRunner)
-            )
-        )
     }
 
     override val openCodeRepository: OpenCodeRepository by lazy {

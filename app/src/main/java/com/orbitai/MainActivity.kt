@@ -16,6 +16,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -67,7 +71,12 @@ class MainActivity : ComponentActivity() {
                     insetsCtrl.isAppearanceLightStatusBars = scheme.background.luminance() > 0.5f
                     insetsCtrl.isAppearanceLightNavigationBars = scheme.background.luminance() > 0.5f
 
-                    val destination by viewModel.startDestination.collectAsState()
+                    var destination by remember { mutableStateOf(viewModel.startDestination.value) }
+                    // Keep local navigation state in sync with the store-driven
+                    // start destination (covers cold launch + later flag flips).
+                    LaunchedEffect(Unit) {
+                        viewModel.startDestination.collect { destination = it }
+                    }
                     // Show a loading spinner while the start destination is
                     // being computed (first ~100-300ms on cold launch).
                     // Without this, the screen is blank until the Flow emits.
@@ -88,7 +97,12 @@ class MainActivity : ComponentActivity() {
                     } else {
                         FileLogger.d(TAG, "Navigation", "destination=$destination")
                         if (destination == Routes.SETUP) {
-                            SetupWizardScreen(onFinishSetup = { })
+                            SetupWizardScreen(onFinishSetup = {
+                                // Honor the contract: when onboarding finishes,
+                                // jump straight to the Dashboard. This is robust
+                                // even if AppShell stops observing the store flag.
+                                destination = Routes.DASHBOARD
+                            })
                         } else {
                             AppShell()
                         }
