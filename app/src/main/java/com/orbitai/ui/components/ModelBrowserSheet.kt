@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -100,72 +101,85 @@ fun ModelBrowserSheet(
             )
         }
     ) { padding ->
-        Column(
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f)
+                .padding(16.dp)
         ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text(SEARCH_PLACEHOLDER) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                singleLine = true,
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = FIELD_HORIZONTAL_PADDING_DP.dp, vertical = FIELD_VERTICAL_PADDING_DP.dp),
-                shape = RoundedCornerShape(FIELD_SHAPE_RADIUS.dp)
-            )
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text(SEARCH_PLACEHOLDER) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = FIELD_HORIZONTAL_PADDING_DP.dp, vertical = FIELD_VERTICAL_PADDING_DP.dp),
+                    shape = RoundedCornerShape(FIELD_SHAPE_RADIUS.dp)
+                )
 
-            if (isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(Modifier.height(SPACER_HEIGHT_DP.dp))
+                if (isLoading) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator()
+                            Spacer(Modifier.height(SPACER_HEIGHT_DP.dp))
+                            Text(
+                                LOADING_MESSAGE,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else if (models.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
-                            LOADING_MESSAGE,
+                            EMPTY_MESSAGE,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                }
-            } else if (models.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
+                } else {
                     Text(
-                        EMPTY_MESSAGE,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        "${filteredModels.size} models",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = FIELD_HORIZONTAL_PADDING_DP.dp, vertical = CONTENT_PADDING_DP.dp)
                     )
-                }
-            } else {
-                Text(
-                    "${filteredModels.size} models",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = FIELD_HORIZONTAL_PADDING_DP.dp, vertical = CONTENT_PADDING_DP.dp)
-                )
 
-                LazyColumn(
-                    contentPadding = PaddingValues(horizontal = FIELD_HORIZONTAL_PADDING_DP.dp, vertical = CONTENT_PADDING_DP.dp),
-                    verticalArrangement = Arrangement.spacedBy(CARD_SPACING_DP.dp)
-                ) {
-                    // Stable key = model id so Compose can reuse item compositions
-                    // across filter changes instead of rebuilding every card.
-                    items(filteredModels, key = { it.id }) { model ->
-                        ModelCard(
-                            model = model,
-                            isSelected = model.id == selectedModelId,
-                            onClick = {
-                                onModelSelected(model.id)
-                                onDismiss()
-                            }
-                        )
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentPadding = PaddingValues(horizontal = FIELD_HORIZONTAL_PADDING_DP.dp, vertical = CONTENT_PADDING_DP.dp),
+                        verticalArrangement = Arrangement.spacedBy(CARD_SPACING_DP.dp)
+                    ) {
+                        // Stable key = model id so Compose can reuse item compositions
+                        // across filter changes instead of rebuilding every card.
+                        items(filteredModels, key = { it.id }) { model ->
+                            ModelCard(
+                                model = model,
+                                isSelected = model.id == selectedModelId,
+                                onClick = {
+                                    onModelSelected(model.id)
+                                    onDismiss()
+                                }
+                            )
+                        }
                     }
                 }
             }
