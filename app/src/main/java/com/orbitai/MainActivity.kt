@@ -1,14 +1,23 @@
 package com.orbitai
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import com.orbitai.BuildConfig
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.orbitai.core.logging.FileLogger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -26,7 +35,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.luminance
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.orbitai.core.logging.FileLogger
 import com.orbitai.ui.navigation.AppShell
 import com.orbitai.ui.navigation.Routes
 import com.orbitai.ui.screens.SetupWizardScreen
@@ -46,10 +54,57 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { _ -> FileLogger.i(TAG, "storage permission result received") }
 
+    /**
+     * DEBUG-ONLY test hook (guarded by BuildConfig.DEBUG so it never ships in
+     * release). Lets a headless harness set the OpenRouter API key + provider/
+     * agent/model via an ordered broadcast, since AndroidX DataStore refuses a
+     * prefs file written by an external process:
+     *   adb shell am broadcast -a com.orbitai.DEBUG_SET_PREFS \
+     *     --es key "sk-or-..." --es provider OpenRouter \
+     *     --es agent OpenClaude --es model "openai/gpt-oss-20b:free"
+     */
+    private fun registerDebugPrefsReceiver() {
+        val filter = IntentFilter("com.orbitai.DEBUG_SET_PREFS")
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                FileLogger.i(TAG, "DEBUG_SET_PREFS onReceive | keyLen=${(intent.getStringExtra("key") ?: "").length}")
+                try {
+                    val key = intent.getStringExtra("key") ?: return
+                    val provider = intent.getStringExtra("provider") ?: "OpenRouter"
+                    val agent = intent.getStringExtra("agent") ?: "OpenClaude"
+                    val model = intent.getStringExtra("model") ?: "openai/gpt-oss-20b:free"
+                    FileLogger.i(TAG, "DEBUG_SET_PREFS resolving pm")
+                    val pm = (application as com.orbitai.OrbitAiApplication).container.prefsManager
+                    kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                        try {
+                            pm.setApiKeyForProvider(provider.lowercase(), key)
+                            pm.setOpenRouterApiKey(key)
+                            pm.setSelectedProvider(provider)
+                            pm.setSelectedAgent(agent)
+                            pm.setSelectedModel(model)
+                            pm.setOnboardingComplete(true)
+                            FileLogger.i(TAG, "DEBUG_SET_PREFS applied | provider=$provider agent=$agent")
+                        } catch (e: Exception) {
+                            FileLogger.e(TAG, "DEBUG_SET_PREFS edit failed: ${e.message}")
+                        }
+                    }
+                    setResultCode(android.app.Activity.RESULT_OK)
+                } catch (e: Exception) {
+                    FileLogger.e(TAG, "DEBUG_SET_PREFS outer failed: ${e.message}")
+                }
+            }
+        }
+        ContextCompat.registerReceiver(
+            this, receiver, filter, ContextCompat.RECEIVER_EXPORTED
+        )
+        FileLogger.i(TAG, "debug prefs receiver registered")
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         FileLogger.i(TAG, "onCreate start")
         requestStoragePermissionIfNeeded()
+        if (BuildConfig.DEBUG) registerDebugPrefsReceiver()
         try {
             enableEdgeToEdge()
             setContent {

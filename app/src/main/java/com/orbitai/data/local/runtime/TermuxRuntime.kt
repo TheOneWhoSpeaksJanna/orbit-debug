@@ -599,14 +599,18 @@ class TermuxRuntime(private val context: Context) {
             val stderrText = StringBuilder()
 
             val stdoutThread = Thread {
-                process.inputStream.bufferedReader().use { reader ->
-                    reader.forEachLine { stdoutText.appendLine(it) }
-                }
+                try {
+                    process.inputStream.bufferedReader().use { reader ->
+                        reader.forEachLine { stdoutText.appendLine(it) }
+                    }
+                } catch (_: Exception) { /* child interrupted/closed: stream abandoned */ }
             }
             val stderrThread = Thread {
-                process.errorStream.bufferedReader().use { reader ->
-                    reader.forEachLine { stderrText.appendLine(it) }
-                }
+                try {
+                    process.errorStream.bufferedReader().use { reader ->
+                        reader.forEachLine { stderrText.appendLine(it) }
+                    }
+                } catch (_: Exception) { /* child interrupted/closed: stream abandoned */ }
             }
             stdoutThread.start()
             stderrThread.start()
@@ -734,19 +738,23 @@ class TermuxRuntime(private val context: Context) {
             val stderrText = StringBuilder()
 
             val stdoutThread = Thread {
-                process.inputStream.bufferedReader().use { reader ->
-                    reader.forEachLine {
-                        if (stripLinkerNoise(it).isNotBlank()) onLine(it)
+                try {
+                    process.inputStream.bufferedReader().use { reader ->
+                        reader.forEachLine {
+                            if (stripLinkerNoise(it).isNotBlank()) onLine(it)
+                        }
                     }
-                }
+                } catch (_: Exception) { /* child interrupted/closed: stream abandoned */ }
             }
             val stderrThread = Thread {
-                process.errorStream.bufferedReader().use { reader ->
-                    reader.forEachLine {
-                        stderrText.appendLine(it)
-                        if (stripLinkerNoise(it).isNotBlank()) onLine(it)
+                try {
+                    process.errorStream.bufferedReader().use { reader ->
+                        reader.forEachLine {
+                            stderrText.appendLine(it)
+                            if (stripLinkerNoise(it).isNotBlank()) onLine(it)
+                        }
                     }
-                }
+                } catch (_: Exception) { /* child interrupted/closed: stream abandoned */ }
             }
             stdoutThread.start()
             stderrThread.start()
@@ -840,11 +848,13 @@ class TermuxRuntime(private val context: Context) {
 
         // Stream stdout to onLine on a daemon thread (mirrors executeInTermuxStreamed).
         val stdoutThread = Thread {
-            process.inputStream.bufferedReader().use { reader ->
-                reader.forEachLine {
-                    if (stripLinkerNoise(it).isNotBlank()) onLine(it)
+            try {
+                process.inputStream.bufferedReader().use { reader ->
+                    reader.forEachLine {
+                        if (stripLinkerNoise(it).isNotBlank()) onLine(it)
+                    }
                 }
-            }
+            } catch (_: Exception) { /* child interrupted/closed: stream abandoned */ }
         }.also { it.isDaemon = true; it.start() }
 
         // Watchdog: if the process is somehow stuck, don't leak it.
