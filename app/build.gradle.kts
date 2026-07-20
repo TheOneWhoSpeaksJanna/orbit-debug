@@ -101,6 +101,10 @@ android {
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+    // App is English-only — strip non-English localized resources from the APK.
+    // Genuine (small) size win with zero behavior change.
+    resourceConfigurations += setOf("en", "en-rUS")
+
     // ── ABI configuration ───────────────────────────────────────────
     // Only arm64-v8a is supported — all native binaries (proot, loader,
     // libtalloc, libandroid-shmem) are arm64. The old 32-bit busybox
