@@ -111,7 +111,7 @@ fun ChatScreen(
     // Attachment launchers — multi-select so several files/images can be
     // attached to one message (not one at a time).
     val imagePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia(10)
+        ActivityResultContracts.PickMultipleVisualMedia(25)
     ) { uris: List<Uri> -> uris.forEach { viewModel.attachFile(it) } }
     val filePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
