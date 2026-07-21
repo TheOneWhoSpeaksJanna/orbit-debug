@@ -52,6 +52,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.orbitai.core.commands.ChatSlashCommands
 import com.orbitai.domain.models.MessageRole
 import com.orbitai.ui.components.ModelBrowserSheet
+import com.orbitai.ui.theme.LocalBubbleShapes
 import com.orbitai.ui.theme.staggeredEntrance
 import com.orbitai.ui.viewmodels.ChatViewModel
 
@@ -796,6 +797,7 @@ private fun AttachmentChips(
 private fun MessageBubble(content: String, isUser: Boolean, modifier: Modifier = Modifier) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
+    val bubbleShapes = LocalBubbleShapes.current
 
     Column(
         modifier = modifier
@@ -806,7 +808,7 @@ private fun MessageBubble(content: String, isUser: Boolean, modifier: Modifier =
         if (isUser) {
             Surface(
                 color = MaterialTheme.colorScheme.primary,
-                shape = RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp),
+                shape = bubbleShapes.user,
                 modifier = Modifier
                     .widthIn(max = BUBBLE_MAX_WIDTH)
                     .combinedClickable(
@@ -828,7 +830,7 @@ private fun MessageBubble(content: String, isUser: Boolean, modifier: Modifier =
         } else {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp),
+                shape = bubbleShapes.assistant,
                 modifier = Modifier
                     .widthIn(max = BUBBLE_MAX_WIDTH)
                     .combinedClickable(

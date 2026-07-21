@@ -40,9 +40,9 @@ val OrbitLightOnSurfaceVariant = Color(0xFF6F5B53)
 val OrbitLightOutline = Color(0xFFE2C7BC)
 
 // ──────────────────────────────────────────────────────────────
-// CHATGPT theme — replicates the ChatGPT look
-//   Light: clean white chat, subtle grey rails, signature green accent
-//   Dark:  near-black canvas, green accent
+// CHATGPT theme — replicates the REAL ChatGPT look
+//   Light: pure white bg, green accent #10A37F, grey assistant bubbles
+//   Dark:  near-black canvas, green accent #19C37D
 // ──────────────────────────────────────────────────────────────
 // ChatGPT green accent (classic + current)
 val ChatGptAccent = Color(0xFF10A37F)
@@ -50,22 +50,22 @@ val ChatGptAccentDark = Color(0xFF19C37D)
 
 val ChatGptDarkBackground = Color(0xFF212121)
 val ChatGptDarkSurface = Color(0xFF171717)
-val ChatGptDarkSurfaceVariant = Color(0xFF2A2A2A)
+val ChatGptDarkSurfaceVariant = Color(0xFF2F2F36)
 val ChatGptDarkOnSurface = Color(0xFFECECEC)
-val ChatGptDarkOnSurfaceVariant = Color(0xFFB4B4B4)
-val ChatGptDarkOutline = Color(0xFF3A3A3A)
+val ChatGptDarkOnSurfaceVariant = Color(0xFF9CA3AF)
+val ChatGptDarkOutline = Color(0xFF424242)
 
 val ChatGptLightBackground = Color(0xFFFFFFFF)
-val ChatGptLightSurface = Color(0xFFF9F9F9)
-val ChatGptLightSurfaceVariant = Color(0xFFECECEC)
-val ChatGptLightOnSurface = Color(0xFF353740)
-val ChatGptLightOnSurfaceVariant = Color(0xFF6B6B76)
-val ChatGptLightOutline = Color(0xFFD9D9E3)
+val ChatGptLightSurface = Color(0xFFF7F7F8)
+val ChatGptLightSurfaceVariant = Color(0xFFF0F0F0)
+val ChatGptLightOnSurface = Color(0xFF2D2D2D)
+val ChatGptLightOnSurfaceVariant = Color(0xFF6B7280)
+val ChatGptLightOutline = Color(0xFFE5E5E5)
 
 // ──────────────────────────────────────────────────────────────
-// CLAUDE theme — replicates the Claude look (warm ivory / clay)
-//   Light: warm cream canvas, clay/terracotta accent
-//   Dark:  warm near-black, clay accent
+// CLAUDE theme — replicates the REAL Claude look (warm ivory/clay)
+//   Light: warm cream canvas (#F5F1EA), terracotta accent (#CC785C)
+//   Dark:  warm near-black, clay accent (#D97757)
 // ──────────────────────────────────────────────────────────────
 // Anthropic clay/terracotta accent
 val ClaudeAccent = Color(0xFFCC785C)
@@ -73,17 +73,17 @@ val ClaudeAccentDark = Color(0xFFD97757)
 
 val ClaudeDarkBackground = Color(0xFF1B1916)
 val ClaudeDarkSurface = Color(0xFF221F1B)
-val ClaudeDarkSurfaceVariant = Color(0xFF322E29)
+val ClaudeDarkSurfaceVariant = Color(0xFF373028)
 val ClaudeDarkOnSurface = Color(0xFFECEAE6)
-val ClaudeDarkOnSurfaceVariant = Color(0xFFC9C3BB)
-val ClaudeDarkOutline = Color(0xFF443F39)
+val ClaudeDarkOnSurfaceVariant = Color(0xFFA99E95)
+val ClaudeDarkOutline = Color(0xFF3D3630)
 
 val ClaudeLightBackground = Color(0xFFF5F1EA)
 val ClaudeLightSurface = Color(0xFFFBF8F4)
-val ClaudeLightSurfaceVariant = Color(0xFFECE5DA)
+val ClaudeLightSurfaceVariant = Color(0xFFE8DED4)
 val ClaudeLightOnSurface = Color(0xFF1C1917)
-val ClaudeLightOnSurfaceVariant = Color(0xFF6B5F57)
-val ClaudeLightOutline = Color(0xFFDAD0C4)
+val ClaudeLightOnSurfaceVariant = Color(0xFF8B7D72)
+val ClaudeLightOutline = Color(0xFFD4C9BD)
 
 // Shared status colors (used by all themes where relevant)
 val OrbitSuccess = Color(0xFF2E7D32)

@@ -1,12 +1,25 @@
 package com.orbitai.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
+/**
+ * Shape configuration per theme — controls how user/assistant chat bubbles look.
+ */
+data class BubbleShapes(
+    val user: RoundedCornerShape = RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp),
+    val assistant: RoundedCornerShape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp)
+)
+
+val LocalBubbleShapes = staticCompositionLocalOf { BubbleShapes() }
 /**
  * Theme presets the user can pick in Settings.
  *  - NORMAL  : the app's "famous AI" orange look
@@ -63,7 +76,23 @@ private fun Color.Companion.fromHex(hex: String): Color? {
     return try { Color(android.graphics.Color.parseColor(hex)) } catch (_: Exception) { null }
 }
 
-// ── NORMAL ──────────────────────────────────────────────────
+// ── Normal bubble shapes ──────────────────────────────────────
+private val NormalBubbles = BubbleShapes(
+    user = RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp),
+    assistant = RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp)
+)
+
+// ── ChatGPT bubble shapes (flatter bottom on user, rounder overall) ─
+private val ChatGptBubbles = BubbleShapes(
+    user = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp),
+    assistant = RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp)
+)
+
+// ── Claude bubble shapes (warmer, more rounded, paper-like) ─────────
+private val ClaudeBubbles = BubbleShapes(
+    user = RoundedCornerShape(22.dp, 22.dp, 8.dp, 22.dp),
+    assistant = RoundedCornerShape(8.dp, 22.dp, 22.dp, 22.dp)
+)
 private val NormalDark = darkColorScheme(
     primary = OrbitPrimary, onPrimary = OrbitOnPrimary,
     primaryContainer = OrbitPrimaryContainer, onPrimaryContainer = OrbitOnPrimaryContainer,
@@ -201,7 +230,14 @@ fun OrbitTheme(
         ThemeId.CLAUDE -> if (useDarkTheme) ClaudeDark else ClaudeLight
         ThemeId.CUSTOM -> customScheme(useDarkTheme, custom)
     }
-    MaterialTheme(colorScheme = scheme, typography = Typography, shapes = Shapes, content = content)
+    val bubbleShapes = when (themeId) {
+        ThemeId.CHATGPT -> ChatGptBubbles
+        ThemeId.CLAUDE -> ClaudeBubbles
+        else -> NormalBubbles
+    }
+    CompositionLocalProvider(LocalBubbleShapes provides bubbleShapes) {
+        MaterialTheme(colorScheme = scheme, typography = Typography, shapes = Shapes, content = content)
+    }
 }
 
 /** Compatibility alias — old code passes an OrbitThemeMode only. */

@@ -1,11 +1,11 @@
 {
-  "tag": "v80488365",
+  "tag": "v80570222",
   "flavors": {
-    "normal":     { "versionCode": 80488365, "apk": "app-normal-debug.apk" },
-    "openclaude": { "versionCode": 80488365, "apk": "app-openclaude-debug.apk" },
-    "opencode":   { "versionCode": 80488365, "apk": "app-opencode-debug.apk" },
-    "claudecode": { "versionCode": 80488365, "apk": "app-claudecode-debug.apk" },
-    "codex":      { "versionCode": 80488365, "apk": "app-codex-debug.apk" },
-    "hermes":     { "versionCode": 80488365, "apk": "app-hermes-debug.apk" }
+    "normal":     { "versionCode": 80570222, "apk": "app-normal-debug.apk" },
+    "openclaude": { "versionCode": 80570222, "apk": "app-openclaude-debug.apk" },
+    "opencode":   { "versionCode": 80570222, "apk": "app-opencode-debug.apk" },
+    "claudecode": { "versionCode": 80570222, "apk": "app-claudecode-debug.apk" },
+    "codex":      { "versionCode": 80570222, "apk": "app-codex-debug.apk" },
+    "hermes":     { "versionCode": 80570222, "apk": "app-hermes-debug.apk" }
   }
 }

@@ -187,7 +187,7 @@ class ChatViewModel(
     /** Hermes default model — a free OpenRouter model that returns HTTP 200 on
      *  both streaming and non-streaming requests with the user's key. Used as
      *  Hermes's LLM backend. */
-    private val HERMES_DEFAULT_MODEL = "tencent/hy3:free"
+    private val HERMES_DEFAULT_MODEL = "openai/gpt-oss-20b:free"
 
     data class PendingCommand(
         val command: String,

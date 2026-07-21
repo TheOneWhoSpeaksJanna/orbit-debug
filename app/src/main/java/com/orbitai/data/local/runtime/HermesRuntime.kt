@@ -175,11 +175,11 @@ class HermesRuntime(private val context: Context) {
         streamLine: (String) -> Unit = {}
     ): String = withContext(Dispatchers.IO) {
         if (!isInstalled) return@withContext "Hermes runtime not installed."
-        val escaped = prompt.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$")
+        val escaped = prompt.replace("\\", "\\\\").replace("'", "\\'").replace("$", "\\$")
         val cmd = buildString {
             append("OPENROUTER_API_KEY='$apiKey' ")
-            append("/opt/hermes-venv/bin/hermes -z \"$escaped\"")
-            append(" --provider openrouter -m '$model' --yolo -t terminal,read,write")
+            append("/opt/hermes-venv/bin/hermes -z '$escaped'")
+            append(" --provider openrouter -m '$model' --yolo")
         }
         try {
             val pb = ProcessBuilder(prootArgs(cmd))
