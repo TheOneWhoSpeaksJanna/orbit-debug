@@ -175,6 +175,7 @@ class OpenRouterProvider(private val httpClient: OkHttpClient) : AiProvider {
         displayName = "OpenRouter",
         models = listOf(
             ApiConfig.OPENROUTER_DEFAULT_MODEL,
+            "google/gemma-4-31b-it:free",
             "anthropic/claude-sonnet-4-20250514",
             "google/gemini-2.0-flash-exp"
         ),

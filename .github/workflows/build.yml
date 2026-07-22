@@ -63,18 +63,38 @@ jobs:
       if: matrix.flavor == 'normal'
       run: ./gradlew testNormalDebugUnitTest --build-cache
 
-    - name: Collect APK
+    - name: Collect APK + version-info
       run: |
         mkdir -p release
-        cp app/build/outputs/apk/${{ matrix.flavor }}/debug/*.apk "release/orbit-ai-${{ matrix.flavor }}-debug-${{ github.run_number }}.apk"
+        APK=$(ls app/build/outputs/apk/${{ matrix.flavor }}/debug/*.apk | head -1)
+        SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+        cp "$APK" "release/orbit-ai-${{ matrix.flavor }}-debug-${{ github.run_number }}.apk"
+        FLAVOR="${{ matrix.flavor }}"
+        export FLAVOR SHA
+        python3 - <<'PY'
+        import json, os
+        path = "release/version-info.json"
+        info = {"tag": "v${{ github.run_number }}", "flavors": {}}
+        if os.path.exists(path):
+            info = json.load(open(path))
+        info.setdefault("flavors", {})
+        apk = "orbit-ai-%s-debug-${{ github.run_number }}.apk" % os.environ["FLAVOR"]
+        info["flavors"][os.environ["FLAVOR"]] = {
+            "versionCode": ${{ github.run_number }},
+            "apk": apk,
+            "sha256": os.environ["SHA"],
+        }
+        json.dump(info, open(path, "w"), indent=2)
+        print(json.dumps(info, indent=2))
+        PY
         ls -la release/
 
-    - name: Upload APK artifact
+    - name: Upload APK + version-info artifact
       if: github.event_name == 'push'
       uses: actions/upload-artifact@v4
       with:
         name: orbit-ai-${{ matrix.flavor }}-apk-${{ github.run_number }}
-        path: release/*.apk
+        path: release/*
         retention-days: 30
 
   release:
