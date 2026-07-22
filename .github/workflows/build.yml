@@ -100,7 +100,7 @@ jobs:
         ls -la release/
 
     - name: Upload APK + version-info artifact
-      if: github.event_name == 'push'
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: orbit-ai-${{ matrix.flavor }}-apk-${{ github.run_number }}
