@@ -25,8 +25,18 @@ jobs:
       with:
         lfs: true
 
-    - name: Ensure Git LFS objects pulled
-      run: git lfs pull || git lfs fetch --all && git lfs checkout
+    - name: Ensure Git LFS objects pulled (best-effort)
+      # The Hermes flavor bundles a 284 MB glibc rootfs via LFS. If that
+      # single object is absent from the LFS server the default `git lfs pull`
+      # aborts the WHOLE checkout and every flavor fails to build. We make
+      # the fetch best-effort: present objects (termux-bootstrap.zip, the
+      # offline .deb toolchain, openclaude.tgz) pull fine, and only the
+      # Hermes build later fails on its own missing asset. The other five
+      # flavors build normally.
+      run: |
+        git lfs pull || git lfs fetch --all || true
+        git lfs checkout || true
+        echo "LFS pull attempted (best-effort)."
 
     - name: Set up JDK 21
       uses: actions/setup-java@v4
