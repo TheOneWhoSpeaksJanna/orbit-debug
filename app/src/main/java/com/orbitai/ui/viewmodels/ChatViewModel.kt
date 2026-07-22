@@ -414,8 +414,15 @@ class ChatViewModel(
     init {
         val c = termuxRuntime.appContext
         val filter = android.content.IntentFilter("com.orbitai.TEST_SEND")
-        c.registerReceiver(testReceiver, filter, android.content.Context.RECEIVER_EXPORTED)
-        com.orbitai.core.logging.FileLogger.i("ChatViewModel", "testReceiver registered")
+        // SECURITY: TEST_SEND drives the real agent (on the Hermes flavor it
+        // funnels straight into sendMessage -> PRoot agent run). An EXPORTED
+        // receiver would let any app on the device trigger agent execution
+        // with no user confirmation. Restrict delivery to this app / same UID.
+        c.registerReceiver(
+            testReceiver, filter,
+            android.content.Context.RECEIVER_NOT_EXPORTED
+        )
+        com.orbitai.core.logging.FileLogger.i("ChatViewModel", "testReceiver registered (not exported)")
     }
 
     fun sendMessage(content: String) {
@@ -859,7 +866,7 @@ class ChatViewModel(
                 return
             }
             slashHandler.postSystemMessage("Downloading update ${check.tag}…")
-            when (val res = manager.downloadAndInstall(check.apkUrl)) {
+            when (val res = manager.downloadAndInstall(check.apkUrl, check.expectedSha256)) {
                 is com.orbitai.data.local.updater.UpdateInstallResult.Success -> {
                     slashHandler.postSystemMessage("Updated successfully — restarting…")
                     manager.restartApp()
@@ -926,6 +933,21 @@ class ChatViewModel(
         continueAiLoop()
     }
 
+    /**
+     * LEGACY / NOT WIRED TO THE LIVE AGENT PATH.
+     *
+     * This `[RUN:]`/`[SUDO:]` -> host-shell loop drove an earlier design where
+     * the app's own LLM parsed tool calls and executed them via
+     * LocalCommandRunner. The shipped agents (openclaude/claude/codex/opencode/
+     * hermes) run INSIDE PRoot and own their tool execution; both the Hermes
+     * and non-Hermes sendMessage() branches `return` before reaching this loop,
+     * so in practice it is unreachable. Kept only so the compile-time contract
+     * for `isCommandAllowed`/`PendingCommand` survives; the REAL dangerous-
+     * command safety gate is enforced in LocalCommandRunner.executePrivilegedCommand.
+     *
+     * Do not treat the Settings "permission level" UI as controlling this path —
+     * it currently has no effect on the live agents. See issue #6.
+     */
     private fun continueAiLoop() {
         // Cancel any previous loop coroutine before launching a new one.
         // This prevents two loop coroutines from running concurrently and

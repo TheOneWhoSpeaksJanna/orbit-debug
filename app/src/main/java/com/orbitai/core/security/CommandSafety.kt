@@ -16,20 +16,28 @@ private val DANGEROUS_PATTERNS: List<String> = listOf(
     "rm -rf", "rm -fr", "rm -r /", "rm -r ~", "rm -rf /", "rm -rf ~",
     "mkfs",
     ":(){", "fork bomb",
-    "curl", "| sh", "| bash", "|sudo", "wget", "| python",
-    "chmod -r", "chmod 777 /",
+    // Network-delivered execution (pipe a download straight into a shell).
+    "curl", "| sh", "| bash", "|sudo", "wget", "| python", "| perl", "| ruby",
+    "curl ", "wget ", "http://", "https://",  // fetching remote content by URL
+    "nc -e", "nc -c", "ncat", "bash -i", "sh -i",  // reverse shells
+    "socat", "telnet ",  // common reverse-shell plumbing
+    "$(curl", "$(wget", "`curl", "`wget",  // command substitution from a fetch
+    "chmod -r", "chmod 777 /", "chmod 777 ",
+    "chown -r", "chown root",
     "dd if=", "> /dev/sd", "> /dev/null",
     "mv / ", "mv /data/data",
-    "shutdown", "reboot", "halt",
+    "shutdown", "reboot", "halt", "poweroff", "fastboot",
     "format",
     ">:{", // fork-bomb-ish
     "> /sys/", "> /proc/",
-    ">/etc/passwd", ">/etc/shadow",
-    "iptables", "ufw",
-    "passwd",
+    ">/etc/passwd", ">/etc/shadow", ">/etc/sudoers",
+    "iptables", "ufw", "nft ",
+    "passwd", "usermod", "useradd",
     "crontab",
-    ">/etc/passwd", ">/etc/shadow",
-    "/data/data/com.termux/files/home/storage"
+    "mount ", "umount ",
+    "/data/data/com.termux/files/home/storage",
+    "setenforce", "selinux",
+    "su ", "sudo su"
 )
 /**
  * Returns true if [cmd] matches a known dangerous pattern and must be blocked.
