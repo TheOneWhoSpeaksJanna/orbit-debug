@@ -14,7 +14,7 @@ import com.orbitai.data.local.entity.*
         TermuxLogEntity::class,
         SkillEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class OrbitAiDatabase : RoomDatabase() {

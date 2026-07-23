@@ -181,6 +181,15 @@ class LocalCommandRunner(
 
     suspend fun executePrivilegedCommand(command: String): CommandResult = withContext(Dispatchers.IO) {
         FileLogger.i(TAG, "Command exec start (privileged)", "cmd=${command.take(2000)}")
+        // Hard safety floor: destructive / foot-gun commands are ALWAYS blocked
+        // on the system-level (Shizuku, uid 0) path, even if the user taps
+        // Allow. A careless "Allow" must never wipe storage, brick symlinks, open
+        // a remote shell, or pipe a network download into a root shell.
+        if (com.orbitai.core.security.isDangerousCommand(command)) {
+            val blocked = "Action blocked by permission rules (dangerous command): $command"
+            FileLogger.w(TAG, "Privileged command blocked by safety gate", "cmd=${command.take(2000)}")
+            return@withContext CommandResult(blocked, ERROR_EXIT_CODE, command)
+        }
         if (!Shizuku.pingBinder()) {
             FileLogger.w(TAG, "Shizuku not running", "action=rejected")
             return@withContext CommandResult(SHIZUKU_NOT_RUNNING, ERROR_EXIT_CODE, command)

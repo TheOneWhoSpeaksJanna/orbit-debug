@@ -25,8 +25,18 @@ jobs:
       with:
         lfs: true
 
-    - name: Ensure Git LFS objects pulled
-      run: git lfs pull || git lfs fetch --all && git lfs checkout
+    - name: Ensure Git LFS objects pulled (best-effort)
+      # The Hermes flavor bundles a 284 MB glibc rootfs via LFS. If that
+      # single object is absent from the LFS server the default `git lfs pull`
+      # aborts the WHOLE checkout and every flavor fails to build. We make
+      # the fetch best-effort: present objects (termux-bootstrap.zip, the
+      # offline .deb toolchain, openclaude.tgz) pull fine, and only the
+      # Hermes build later fails on its own missing asset. The other five
+      # flavors build normally.
+      run: |
+        git lfs pull || git lfs fetch --all || true
+        git lfs checkout || true
+        echo "LFS pull attempted (best-effort)."
 
     - name: Set up JDK 21
       uses: actions/setup-java@v4
@@ -63,18 +73,38 @@ jobs:
       if: matrix.flavor == 'normal'
       run: ./gradlew testNormalDebugUnitTest --build-cache
 
-    - name: Collect APK
+    - name: Collect APK + version-info
       run: |
         mkdir -p release
-        cp app/build/outputs/apk/${{ matrix.flavor }}/debug/*.apk "release/orbit-ai-${{ matrix.flavor }}-debug-${{ github.run_number }}.apk"
+        APK=$(ls app/build/outputs/apk/${{ matrix.flavor }}/debug/*.apk | head -1)
+        SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+        cp "$APK" "release/orbit-ai-${{ matrix.flavor }}-debug-${{ github.run_number }}.apk"
+        FLAVOR="${{ matrix.flavor }}"
+        export FLAVOR SHA
+        python3 - <<'PY'
+        import json, os
+        path = "release/version-info.json"
+        info = {"tag": "v${{ github.run_number }}", "flavors": {}}
+        if os.path.exists(path):
+            info = json.load(open(path))
+        info.setdefault("flavors", {})
+        apk = "orbit-ai-%s-debug-${{ github.run_number }}.apk" % os.environ["FLAVOR"]
+        info["flavors"][os.environ["FLAVOR"]] = {
+            "versionCode": ${{ github.run_number }},
+            "apk": apk,
+            "sha256": os.environ["SHA"],
+        }
+        json.dump(info, open(path, "w"), indent=2)
+        print(json.dumps(info, indent=2))
+        PY
         ls -la release/
 
-    - name: Upload APK artifact
-      if: github.event_name == 'push'
+    - name: Upload APK + version-info artifact
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: orbit-ai-${{ matrix.flavor }}-apk-${{ github.run_number }}
-        path: release/*.apk
+        path: release/*
         retention-days: 30
 
   release:
@@ -97,3 +127,63 @@ jobs:
         tag_name: v${{ github.run_number }}
         name: Orbit AI v${{ github.run_number }}
         files: release/*.apk
+
+  # ── Real on-device smoke test ──────────────────────────────────────────────
+  # ubuntu-latest runners expose /dev/kvm, so we boot a hardware-accelerated
+  # ARM64 AVD (via the battle-tested android-emulator-runner, which handles the
+  # boot/wait reliably) and actually install + launch every flavor APK. This
+  # catches runtime crashes (bad provider defaults, missing runtime assets,
+  # Hermes PRoot boot failures) that a compile-only build cannot.
+  test-emulator:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: [ normal, openclaude, codex, opencode, claudecode, hermes ]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download the flavor APK + version-info
+      uses: actions/download-artifact@v4
+      with:
+        name: orbit-ai-${{ matrix.flavor }}-apk-${{ github.run_number }}
+        path: apk
+
+    - name: Enable KVM (ubuntu-latest)
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+        ls -l /dev/kvm
+
+    - name: Boot emulator + install/launch ${{ matrix.flavor }} and assert no crash
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: 34
+        target: google_apis
+        arch: arm64-v8a
+        profile: pixel_6
+        force-avd-creation: false
+        emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -partition-size 2048
+        disable-animations: true
+        script: |
+          APK=$(ls apk/*.apk | head -1)
+          PKG=$(aapt2 dump packagename "$APK")
+          echo "APK=$APK  PKG=$PKG"
+          adb install -r "$APK"
+          adb logcat -c
+          # Launch the app (no key needed for a boot/runtime smoke test).
+          adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1
+          sleep 12
+          echo "=== logcat (Orbit / runtime / agent) ==="
+          adb logcat -d -s "Orbit AI" "TermuxRuntime" "HermesRuntime" "ChatViewModel" \
+            "OpenRouterProvider" "ProviderCatalog" 2>/dev/null | tail -30
+          echo "=== crash check ==="
+          CRASH=$(adb logcat -d 2>/dev/null | grep -c "FATAL EXCEPTION\|AndroidRuntime: Crash")
+          echo "fatal-crash-lines=$CRASH"
+          if [ "$CRASH" -gt 0 ]; then
+            echo "APP CRASHED on ${{ matrix.flavor }}"; exit 1
+          fi
+          echo "${{ matrix.flavor }}: launched, no fatal crash"
+          adb uninstall "$PKG" >/dev/null 2>&1 || true

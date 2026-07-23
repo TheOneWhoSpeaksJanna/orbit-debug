@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "OmniClaw"
+rootProject.name = "Orbit-AI"
 
 include(":app")

@@ -70,7 +70,7 @@ private const val ANIMATION_DURATION_MS = 900
 private val BUBBLE_MAX_WIDTH = 480.dp
 
 private val FALLBACK_MODELS = listOf(
-    "tencent/hy3:free", "gemini-2.0-flash-exp", "gpt-4o", "claude-sonnet-4-20250514"
+    "openai/gpt-oss-20b:free", "gemini-2.0-flash-exp", "gpt-4o", "claude-sonnet-4-20250514"
 )
 private val ANIMATION_DELAYS = listOf(0, 150, 300)
 
@@ -293,6 +293,7 @@ fun ChatScreen(
                         MessageBubble(
                             content = message.content,
                             isUser = message.role == MessageRole.USER,
+                            attachments = message.attachments,
                             modifier = Modifier.staggeredEntrance(index = 0, itemId = message.id)
                         )
                     }
@@ -794,7 +795,12 @@ private fun AttachmentChips(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageBubble(content: String, isUser: Boolean, modifier: Modifier = Modifier) {
+private fun MessageBubble(
+    content: String,
+    isUser: Boolean,
+    attachments: List<String> = emptyList(),
+    modifier: Modifier = Modifier
+) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
     val bubbleShapes = LocalBubbleShapes.current
@@ -819,13 +825,17 @@ private fun MessageBubble(content: String, isUser: Boolean, modifier: Modifier =
                         }
                     )
             ) {
-                Text(
-                    text = content,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    lineHeight = 22.sp
-                )
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    if (attachments.isNotEmpty()) {
+                        AttachmentChipsStatic(attachments)
+                    }
+                    Text(
+                        text = content,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        lineHeight = 22.sp
+                    )
+                }
             }
         } else {
             Surface(
@@ -841,13 +851,45 @@ private fun MessageBubble(content: String, isUser: Boolean, modifier: Modifier =
                         }
                     )
             ) {
-                Text(
-                    text = content,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    style = MaterialTheme.typography.bodyMedium,
-                    lineHeight = 22.sp
-                )
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    if (attachments.isNotEmpty()) {
+                        AttachmentChipsStatic(attachments)
+                    }
+                    Text(
+                        text = content,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyMedium,
+                        lineHeight = 22.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Renders already-sent attachment names inside a message bubble (read-only). */
+@Composable
+private fun AttachmentChipsStatic(names: List<String>) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 6.dp)
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        names.forEach { name ->
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.AttachFile, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(name, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                }
             }
         }
     }

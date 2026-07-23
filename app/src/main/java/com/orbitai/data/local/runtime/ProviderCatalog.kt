@@ -147,7 +147,7 @@ object ProviderCatalog {
     private fun fallbackProviders(): List<ProviderEntry> {
         return listOf(
             ProviderEntry("openrouter", "OpenRouter", "gateway", "openai-compatible",
-                "https://openrouter.ai/api/v1", "api-key", "tencent/hy3:free", "openrouter", true),
+                "https://openrouter.ai/api/v1", "api-key", "openai/gpt-oss-20b:free", "openrouter", true),
             ProviderEntry("anthropic", "Anthropic Claude", "vendor", "anthropic-native",
                 "https://api.anthropic.com", "api-key", "claude-sonnet-4-20250514", "claude", true),
             ProviderEntry("openai", "OpenAI", "vendor", "openai-compatible",

@@ -23,7 +23,10 @@ data class Message(
     val sessionId: String,
     val role: MessageRole,
     val content: String,
-    val timestamp: Long
+    val timestamp: Long,
+    // Attachment display names captured at send time, so the bubble + history
+    // show what was attached (previously discarded on send).
+    val attachments: List<String> = emptyList()
 )
 
 data class Agent(

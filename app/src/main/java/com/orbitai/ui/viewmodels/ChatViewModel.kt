@@ -110,9 +110,7 @@ class ChatViewModel(
         val ctx = termuxRuntime.appContext
         // Copy attachments into the rootfs the ACTIVE agent actually sees.
         // openclaude/opencode/claudecode/codex run under TermuxRuntime's rootfs;
-        // Hermes runs under its own glibc rootfs at a different path. The
-        // hardcoded /data/data/com.termux/... path was wrong for Hermes, so
-        // the agent could never find the file (the "fake attachment" bug).
+        // Hermes runs under its own glibc rootfs at a different path.
         val hostDir: java.io.File
         val insideBase: String
         if (com.orbitai.core.config.FlavorConfig.isHermes) {
@@ -125,7 +123,7 @@ class ChatViewModel(
         }
         hostDir.mkdirs()
         val lines = StringBuilder("\n\n--- Attached files (read them from disk) ---\n")
-        var copyFailed = false
+        var copiedCount = 0
         for ((idx, item) in items.withIndex()) {
             try {
                 val uri = android.net.Uri.parse(item.uri)
@@ -134,7 +132,7 @@ class ChatViewModel(
                 val outFile = java.io.File(hostDir, outName)
                 ctx.contentResolver.openInputStream(uri)?.use { input ->
                     outFile.outputStream().use { output -> input.copyTo(output) }
-                }
+                } ?: throw IllegalStateException("contentResolver returned null stream for ${item.uri}")
                 outFile.setReadable(true, false)
                 val kind = when {
                     safe.matches(Regex(".*\\.(png|jpe?g|webp|gif|bmp)$", RegexOption.IGNORE_CASE)) -> "image"
@@ -149,8 +147,8 @@ class ChatViewModel(
                     else -> "This is a file — read its contents from disk."
                 }
                 lines.append("- $kind: $insideBase/$outName\n  $guidance\n")
+                copiedCount++
             } catch (e: Exception) {
-                copyFailed = true
                 com.orbitai.core.logging.FileLogger.w(
                     "ChatViewModel", "Attachment copy failed",
                     "name=${item.displayName} err=${e.message}"
@@ -158,8 +156,8 @@ class ChatViewModel(
             }
         }
         lines.append("--- end attachments ---\n")
-        if (copyFailed) {
-            lines.append("(Note: one or more attachments could not be read from the picker.)\n")
+        if (copiedCount < items.size) {
+            lines.append("(Note: ${items.size - copiedCount} attachment(s) could not be read from the picker.)\n")
         }
         return lines.toString()
     }
@@ -414,8 +412,15 @@ class ChatViewModel(
     init {
         val c = termuxRuntime.appContext
         val filter = android.content.IntentFilter("com.orbitai.TEST_SEND")
-        c.registerReceiver(testReceiver, filter, android.content.Context.RECEIVER_EXPORTED)
-        com.orbitai.core.logging.FileLogger.i("ChatViewModel", "testReceiver registered")
+        // SECURITY: TEST_SEND drives the real agent (on the Hermes flavor it
+        // funnels straight into sendMessage -> PRoot agent run). An EXPORTED
+        // receiver would let any app on the device trigger agent execution
+        // with no user confirmation. Restrict delivery to this app / same UID.
+        c.registerReceiver(
+            testReceiver, filter,
+            android.content.Context.RECEIVER_NOT_EXPORTED
+        )
+        com.orbitai.core.logging.FileLogger.i("ChatViewModel", "testReceiver registered (not exported)")
     }
 
     fun sendMessage(content: String) {
@@ -454,7 +459,8 @@ class ChatViewModel(
                 sessionId = session.id,
                 role = MessageRole.USER,
                 content = content,
-                timestamp = System.currentTimeMillis()
+                timestamp = System.currentTimeMillis(),
+                attachments = _attachments.value.map { it.displayName }
             )
             repository.insertMessage(userMsg)
 
@@ -859,7 +865,7 @@ class ChatViewModel(
                 return
             }
             slashHandler.postSystemMessage("Downloading update ${check.tag}…")
-            when (val res = manager.downloadAndInstall(check.apkUrl)) {
+            when (val res = manager.downloadAndInstall(check.apkUrl, check.expectedSha256)) {
                 is com.orbitai.data.local.updater.UpdateInstallResult.Success -> {
                     slashHandler.postSystemMessage("Updated successfully — restarting…")
                     manager.restartApp()
@@ -926,6 +932,21 @@ class ChatViewModel(
         continueAiLoop()
     }
 
+    /**
+     * LEGACY / NOT WIRED TO THE LIVE AGENT PATH.
+     *
+     * This `[RUN:]`/`[SUDO:]` -> host-shell loop drove an earlier design where
+     * the app's own LLM parsed tool calls and executed them via
+     * LocalCommandRunner. The shipped agents (openclaude/claude/codex/opencode/
+     * hermes) run INSIDE PRoot and own their tool execution; both the Hermes
+     * and non-Hermes sendMessage() branches `return` before reaching this loop,
+     * so in practice it is unreachable. Kept only so the compile-time contract
+     * for `isCommandAllowed`/`PendingCommand` survives; the REAL dangerous-
+     * command safety gate is enforced in LocalCommandRunner.executePrivilegedCommand.
+     *
+     * Do not treat the Settings "permission level" UI as controlling this path —
+     * it currently has no effect on the live agents. See issue #6.
+     */
     private fun continueAiLoop() {
         // Cancel any previous loop coroutine before launching a new one.
         // This prevents two loop coroutines from running concurrently and
@@ -1470,7 +1491,7 @@ class ChatViewModel(
     companion object {
         private val RUN_COMMAND_REGEX = "\\[RUN: (.+?)]".toRegex()
         private val SUDO_COMMAND_REGEX = "\\[SUDO: (.+?)]".toRegex()
-        val DEFAULT_MODELS = listOf("tencent/hy3:free", "gemini-2.0-flash-exp", "gpt-4o", "claude-sonnet-4-20250514", "glm-5.2", "glm-4.6")
+        val DEFAULT_MODELS = listOf("openai/gpt-oss-20b:free", "gemini-2.0-flash-exp", "gpt-4o", "claude-sonnet-4-20250514", "glm-5.2", "glm-4.6")
 
         val Factory: ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")

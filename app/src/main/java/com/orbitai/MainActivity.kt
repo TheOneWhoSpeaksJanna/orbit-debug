@@ -94,10 +94,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        // SECURITY: this is a DEBUG-only test hook that mutates stored API
+        // keys and flags. It MUST NOT be exported — an exported receiver lets
+        // any other app on the device (or `adb` from an untrusted host) set
+        // the user's provider key / agent and mark onboarding complete
+        // without any user interaction. Use RECEIVER_NOT_EXPORTED so only this
+        // app (and same-UID processes) can deliver the intent.
         ContextCompat.registerReceiver(
-            this, receiver, filter, ContextCompat.RECEIVER_EXPORTED
+            this, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED
         )
-        FileLogger.i(TAG, "debug prefs receiver registered")
+        FileLogger.i(TAG, "debug prefs receiver registered (not exported)")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
