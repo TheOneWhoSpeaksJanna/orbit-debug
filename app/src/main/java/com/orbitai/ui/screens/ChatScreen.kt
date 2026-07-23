@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.StateFlow
 import com.orbitai.core.commands.ChatSlashCommands
 import com.orbitai.domain.models.MessageRole
 import com.orbitai.ui.components.ModelBrowserSheet
@@ -93,7 +94,6 @@ fun ChatScreen(
     val isFetchingModels by viewModel.isFetchingModels.collectAsState()
     val hasAgent by viewModel.hasAgent.collectAsState()
     val pendingCommand by viewModel.pendingCommand.collectAsState()
-    val streamLines by viewModel.streamLines.collectAsState()
     val showTranscript by viewModel.showTranscript.collectAsState()
 
     var inputText by remember { mutableStateOf("") }
@@ -161,7 +161,7 @@ fun ChatScreen(
             listState.firstVisibleItemIndex >= listState.layoutInfo.totalItemsCount - 3
         }
     }
-    LaunchedEffect(lastMessageId, streamLines.size) {
+    LaunchedEffect(lastMessageId) {
         if (lastMessageId != null && isNearBottom) {
             listState.scrollToItem(messages.size - 1)
         }
@@ -302,7 +302,7 @@ fun ChatScreen(
                     if (showTranscript) {
                         item {
                             TranscriptBlock(
-                                lines = streamLines,
+                                lines = viewModel.streamLines,
                                 expanded = expandedTranscript,
                                 onToggleExpand = { expandedTranscript = !expandedTranscript }
                             )
@@ -625,13 +625,18 @@ private data class AttachOption(
 
 @Composable
 private fun TranscriptBlock(
-    lines: List<String>,
+    lines: StateFlow<List<String>>,
     expanded: Boolean,
     onToggleExpand: () -> Unit
 ) {
+    // Collect the streamed lines HERE (inside this subtree) instead of in the
+    // parent ChatScreen body. This confines recomposition to the transcript as
+    // lines stream in — the whole chat screen used to recompose on every line,
+    // which was the main source of scroll/input lag during an agent run.
+    val streamLines by lines.collectAsState()
     // Cap to the last 300 lines so very long agent runs don't allocate
     // thousands of Text widgets. The transcript is an aid, not an archive.
-    val shown = if (lines.size > 300) lines.takeLast(300) else lines
+    val shown = if (streamLines.size > 300) streamLines.takeLast(300) else streamLines
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -689,7 +694,7 @@ private fun TranscriptBlock(
                     ) {
                         items(
                             count = shown.size,
-                            key = { index -> "${shown[index].hashCode()}#$index" }
+                            key = { index -> index }
                         ) { index ->
                             val line = shown[index]
                             Text(
