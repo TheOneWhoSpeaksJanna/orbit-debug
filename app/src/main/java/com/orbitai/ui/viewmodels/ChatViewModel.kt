@@ -110,9 +110,7 @@ class ChatViewModel(
         val ctx = termuxRuntime.appContext
         // Copy attachments into the rootfs the ACTIVE agent actually sees.
         // openclaude/opencode/claudecode/codex run under TermuxRuntime's rootfs;
-        // Hermes runs under its own glibc rootfs at a different path. The
-        // hardcoded /data/data/com.termux/... path was wrong for Hermes, so
-        // the agent could never find the file (the "fake attachment" bug).
+        // Hermes runs under its own glibc rootfs at a different path.
         val hostDir: java.io.File
         val insideBase: String
         if (com.orbitai.core.config.FlavorConfig.isHermes) {
@@ -125,7 +123,7 @@ class ChatViewModel(
         }
         hostDir.mkdirs()
         val lines = StringBuilder("\n\n--- Attached files (read them from disk) ---\n")
-        var copyFailed = false
+        var copiedCount = 0
         for ((idx, item) in items.withIndex()) {
             try {
                 val uri = android.net.Uri.parse(item.uri)
@@ -134,7 +132,7 @@ class ChatViewModel(
                 val outFile = java.io.File(hostDir, outName)
                 ctx.contentResolver.openInputStream(uri)?.use { input ->
                     outFile.outputStream().use { output -> input.copyTo(output) }
-                }
+                } ?: throw IllegalStateException("contentResolver returned null stream for ${item.uri}")
                 outFile.setReadable(true, false)
                 val kind = when {
                     safe.matches(Regex(".*\\.(png|jpe?g|webp|gif|bmp)$", RegexOption.IGNORE_CASE)) -> "image"
@@ -149,8 +147,8 @@ class ChatViewModel(
                     else -> "This is a file — read its contents from disk."
                 }
                 lines.append("- $kind: $insideBase/$outName\n  $guidance\n")
+                copiedCount++
             } catch (e: Exception) {
-                copyFailed = true
                 com.orbitai.core.logging.FileLogger.w(
                     "ChatViewModel", "Attachment copy failed",
                     "name=${item.displayName} err=${e.message}"
@@ -158,8 +156,8 @@ class ChatViewModel(
             }
         }
         lines.append("--- end attachments ---\n")
-        if (copyFailed) {
-            lines.append("(Note: one or more attachments could not be read from the picker.)\n")
+        if (copiedCount < items.size) {
+            lines.append("(Note: ${items.size - copiedCount} attachment(s) could not be read from the picker.)\n")
         }
         return lines.toString()
     }
@@ -461,7 +459,8 @@ class ChatViewModel(
                 sessionId = session.id,
                 role = MessageRole.USER,
                 content = content,
-                timestamp = System.currentTimeMillis()
+                timestamp = System.currentTimeMillis(),
+                attachments = _attachments.value.map { it.displayName }
             )
             repository.insertMessage(userMsg)
 
