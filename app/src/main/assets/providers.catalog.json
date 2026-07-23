@@ -14,7 +14,7 @@
     {"id": "zai", "name": "Z.AI", "type": "vendor", "transport": "openai-compatible", "baseUrl": "https://api.z.ai/api/paas/v4", "authMode": "api-key", "defaultModel": "", "icon": "zai", "requiresKey": true},
     {"id": "xiaomi-mimo", "name": "Xiaomi MiMo", "type": "vendor", "transport": "openai-compatible", "baseUrl": "https://api.xiaomimimo.com/v1", "authMode": "api-key", "defaultModel": "", "icon": "xiaomi", "requiresKey": true},
 
-    {"id": "openrouter", "name": "OpenRouter", "type": "gateway", "transport": "openai-compatible", "baseUrl": "https://openrouter.ai/api/v1", "authMode": "api-key", "defaultModel": "tencent/hy3:free", "icon": "openrouter", "requiresKey": true},
+    {"id": "openrouter", "name": "OpenRouter", "type": "gateway", "transport": "openai-compatible", "baseUrl": "https://openrouter.ai/api/v1", "authMode": "api-key", "defaultModel": "openai/gpt-oss-20b:free", "icon": "openrouter", "requiresKey": true},
     {"id": "groq", "name": "Groq", "type": "gateway", "transport": "openai-compatible", "baseUrl": "https://api.groq.com/openai/v1", "authMode": "api-key", "defaultModel": "llama-3.3-70b-versatile", "icon": "groq", "requiresKey": true},
     {"id": "together", "name": "Together AI", "type": "gateway", "transport": "openai-compatible", "baseUrl": "https://api.together.xyz/v1", "authMode": "api-key", "defaultModel": "meta-llama/Llama-3.3-70B-Instruct-Turbo", "icon": "together", "requiresKey": true},
     {"id": "mistral", "name": "Mistral AI", "type": "gateway", "transport": "openai-compatible", "baseUrl": "https://api.mistral.ai/v1", "authMode": "api-key", "defaultModel": "mistral-large-latest", "icon": "mistral", "requiresKey": true},

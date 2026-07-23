@@ -127,3 +127,83 @@ jobs:
         tag_name: v${{ github.run_number }}
         name: Orbit AI v${{ github.run_number }}
         files: release/*.apk
+
+  # ── Real on-device smoke test ──────────────────────────────────────────────
+  # ubuntu-latest runners expose /dev/kvm, so we can boot a hardware-accelerated
+  # ARM64 AVD and actually install + launch every flavor APK. This catches
+  # runtime crashes (bad provider defaults, missing runtime assets, Hermes
+  # PRoot boot failures) that a compile-only build cannot.
+  test-emulator:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: [ normal, openclaude, codex, opencode, claudecode, hermes ]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download the flavor APK + version-info
+      uses: actions/download-artifact@v4
+      with:
+        name: orbit-ai-${{ matrix.flavor }}-apk-${{ github.run_number }}
+        path: apk
+
+    - name: Install emulator + ARM64 system image
+      run: |
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+          "emulator" "platform-tools" "system-images;android-34;google_apis;arm64-v8a"
+        echo "no" | $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd -f \
+          -n test_avd -k "system-images;android-34;google_apis;arm64-v8a"
+
+    - name: Start emulator (KVM available on ubuntu-latest)
+      run: |
+        $ANDROID_HOME/emulator/emulator -avd test_avd -no-window -no-audio \
+          -no-boot-anim -gpu swiftshader_indirect -partition-size 2048 \
+          > /tmp/emulator.log 2>&1 &
+        $ANDROID_HOME/platform-tools/adb wait-for-device
+        for i in $(seq 1 60); do
+          if [ "$($ANDROID_HOME/platform-tools/adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+            echo "BOOTED after ${i}0s"; break
+          fi
+          sleep 10
+        done
+        $ANDROID_HOME/platform-tools/adb shell getprop sys.boot_completed
+        $ANDROID_HOME/platform-tools/adb devices
+
+    - name: Install + launch ${{ matrix.flavor }} and assert no crash
+      env:
+        # User's OpenRouter key is burned (pasted in chat). Add a FRESH secret
+        # at Settings > Secrets > OPENROUTER_KEY to also exercise the live call;
+        # without it we still validate boot + runtime init (no crash).
+        OPENROUTER_KEY: ${{ secrets.OPENROUTER_KEY }}
+      run: |
+        APK=$(ls apk/*.apk | head -1)
+        ADB=$ANDROID_HOME/platform-tools/adb
+        PKG=$($ANDROID_HOME/cmdline-tools/latest/bin/aapt2 dump packagename "$APK")
+        echo "APK=$APK  PKG=$PKG"
+        $ADB install -r "$APK"
+        $ADB logcat -c
+        if [ -n "$OPENROUTER_KEY" ]; then
+          $ADB shell am start -n "$PKG/.MainActivity" >/dev/null 2>&1 || \
+            $ADB shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null
+          sleep 8
+          $ADB shell am broadcast -a com.orbitai.DEBUG_SET_PREFS \
+            --es key "$OPENROUTER_KEY" --es provider OpenRouter \
+            --es model "openai/gpt-oss-20b:free" --ez onboarding_complete true >/dev/null 2>&1 || true
+        else
+          $ADB shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null
+        fi
+        sleep 10
+        echo "=== logcat (Orbit / runtime / agent) ==="
+        $ADB logcat -d -s "Orbit AI" "TermuxRuntime" "HermesRuntime" "ChatViewModel" \
+          "OpenRouterProvider" "ProviderCatalog" 2>/dev/null | tail -30
+        echo "=== crash check ==="
+        CRASH=$($ADB logcat -d 2>/dev/null | grep -c "FATAL EXCEPTION\|AndroidRuntime: Crash")
+        echo "fatal-crash-lines=$CRASH"
+        if [ "$CRASH" -gt 0 ]; then
+          echo "APP CRASHED on ${{ matrix.flavor }}"; exit 1
+        fi
+        echo "${{ matrix.flavor }}: launched, no fatal crash"
+        $ADB uninstall "$PKG" >/dev/null 2>&1 || true
