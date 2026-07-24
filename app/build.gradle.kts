@@ -330,6 +330,10 @@ dependencies {
   implementation(libs.androidx.room.paging)
   implementation(libs.androidx.paging.runtime)
   implementation(libs.androidx.paging.compose)
+  // Applies the embedded baseline profile at install/first-run even for
+  // sideloaded APKs (no Play Store) — without this the profile is ignored
+  // on most devices, so startup/scroll stay unoptimized.
+  implementation(libs.androidx.profileinstaller)
   implementation(libs.converter.moshi)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
