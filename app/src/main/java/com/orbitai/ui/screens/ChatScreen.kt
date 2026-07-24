@@ -406,10 +406,10 @@ fun ChatScreen(
                                         // Send ONLY the user's text. Attachment
                                         // files are copied to the agent's rootfs
                                         // and described to the model inside
-                                        // prepareAttachmentsForAgent() — we must
-                                        // NOT inject the file name as chat text,
-                                        // or the model only "sees" a filename
-                                        // (the old fake-attachment bug).
+                                        // AttachmentsManager.prepareForAgent()
+                                        // — we must NOT inject the file name as
+                                        // chat text, or the model only "sees" a
+                                        // filename (the old fake-attachment bug).
                                         val toSend = inputText.trim()
                                         viewModel.sendMessage(toSend)
                                         inputText = ""
@@ -762,8 +762,8 @@ private fun SlashPalette(
 
 @Composable
 private fun AttachmentChips(
-    attachments: List<ChatViewModel.AttachmentItem>,
-    onRemove: (ChatViewModel.AttachmentItem) -> Unit
+    attachments: List<com.orbitai.core.attachments.AttachmentsManager.AttachmentItem>,
+    onRemove: (com.orbitai.core.attachments.AttachmentsManager.AttachmentItem) -> Unit
 ) {
     Row(
         modifier = Modifier

@@ -1,0 +1,25 @@
+# Baseline Profile — precompiles hot code paths at install time (R8 + ART),
+# which removes first-launch / first-scroll jank on low-end devices.
+# Hand-authored (no device profiling available in CI); class-level rules so R8
+# profiles every method of the listed hot classes. Consumed automatically by
+# R8 during minify and embedded in assets/dexopt/baseline.prof.
+HSPLcom/orbitai/OrbitAiApplication;
+HSPLcom/orbitai/MainActivity;
+HSPLcom/orbitai/ui/screens/ChatScreenKt;
+HSPLcom/orbitai/ui/viewmodels/ChatViewModel;
+HSPLcom/orbitai/ui/viewmodels/SetupViewModel;
+HSPLcom/orbitai/ui/viewmodels/ProvidersViewModel;
+HSPLcom/orbitai/ui/viewmodels/SettingsViewModel;
+HSPLcom/orbitai/data/local/runtime/TermuxRuntime;
+HSPLcom/orbitai/data/local/runtime/OrbitRuntimeManager;
+HSPLcom/orbitai/data/local/runtime/HermesRuntime;
+HSPLcom/orbitai/core/di/AppContainer;
+HSPLcom/orbitai/data/local/OrbitDatabase;
+HSPLcom/orbitai/data/local/dao/OrbitAiDao;
+HSPLcom/orbitai/data/repository/OrbitAiRepositoryImpl;
+HSPLcom/orbitai/ui/theme/ThemeKt;
+HSPLcom/orbitai/ui/components/ModelBrowserSheetKt;
+HSPLcom/orbitai/ui/screens/SetupWizardScreenKt;
+HSPLcom/orbitai/ui/screens/SettingsScreenKt;
+HSPLcom/orbitai/ui/screens/ProvidersScreenKt;
+HSPLcom/orbitai/ui/screens/DashboardScreenKt;

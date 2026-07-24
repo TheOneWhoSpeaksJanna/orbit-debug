@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import com.orbitai.OrbitAiApplication
+import com.orbitai.core.attachments.AttachmentsManager
 import com.orbitai.core.logging.CoroutineExceptionHandlerFactory
 import com.orbitai.core.config.FlavorConfig
 import com.orbitai.data.local.runner.LocalCommandRunner
@@ -71,96 +72,20 @@ class ChatViewModel(
     // Set by the host screen so slash commands can navigate (e.g. /skills).
     var onNavigateToSkills: (() -> Unit)? = null
 
-    // Attachments queued for the next message (images / files). The agent
-    // receives their display names; deep multimodal ingestion is a follow-up.
-    private val _attachments = MutableStateFlow<List<AttachmentItem>>(emptyList())
-    val attachments: StateFlow<List<AttachmentItem>> = _attachments.asStateFlow()
+    // Attachments queued for the next message are owned by AttachmentsManager
+    // (extracted out of this class to keep the chat ViewModel focused on
+    // agent execution + streaming). The agent receives their display names;
+    // deep multimodal ingestion is a follow-up.
+    private val attachmentsManager = AttachmentsManager(termuxRuntime)
+    val attachments: StateFlow<List<AttachmentsManager.AttachmentItem>> get() = attachmentsManager.attachments
 
-    fun attachFile(uri: android.net.Uri) {
-        val ctx = termuxRuntime.appContext
-        val name = try {
-            ctx.contentResolver.query(uri, null, null, null, null)?.use { c ->
-                val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (idx >= 0 && c.moveToFirst()) c.getString(idx) else uri.lastPathSegment
-            } ?: uri.lastPathSegment ?: "file"
-        } catch (_: Exception) { uri.lastPathSegment ?: "file" }
-        _attachments.value = _attachments.value + AttachmentItem(uri = uri.toString(), displayName = name)
-    }
+    /** Delegates to [AttachmentsManager] — kept as ViewModel API so the UI
+     *  doesn't reach into the manager directly. */
+    fun attachFile(uri: android.net.Uri) = attachmentsManager.attachFile(uri)
+    fun removeAttachment(item: AttachmentsManager.AttachmentItem) = attachmentsManager.removeAttachment(item)
+    fun clearAttachments() = attachmentsManager.clear()
 
-    fun removeAttachment(item: AttachmentItem) {
-        _attachments.value = _attachments.value.filter { it != item }
-    }
 
-    fun clearAttachments() {
-        _attachments.value = emptyList()
-    }
-
-    /**
-     * Copy the queued attachments into a PRoot-visible directory
-     * (HOME/attachments) so the CLI agent can actually open and read them,
-     * and return a prompt suffix that tells the agent where they are + their
-     * type. This is the real multimodal ingestion path: the agent reads the
-     * file bytes (images, text, PDFs) from disk itself.
-     *
-     * Returns "" when there are no attachments.
-     */
-    private fun prepareAttachmentsForAgent(): String {
-        val items = _attachments.value
-        if (items.isEmpty()) return ""
-        val ctx = termuxRuntime.appContext
-        // Copy attachments into the rootfs the ACTIVE agent actually sees.
-        // openclaude/opencode/claudecode/codex run under TermuxRuntime's rootfs;
-        // Hermes runs under its own glibc rootfs at a different path.
-        val hostDir: java.io.File
-        val insideBase: String
-        if (com.orbitai.core.config.FlavorConfig.isHermes) {
-            val hr = com.orbitai.data.local.runtime.HermesRuntime(ctx)
-            hostDir = java.io.File(hr.rootfsDir, "home/attachments")
-            insideBase = "/home/attachments"
-        } else {
-            hostDir = java.io.File(termuxRuntime.homeDir, "attachments")
-            insideBase = "/data/data/com.termux/files/home/attachments"
-        }
-        hostDir.mkdirs()
-        val lines = StringBuilder("\n\n--- Attached files (read them from disk) ---\n")
-        var copiedCount = 0
-        for ((idx, item) in items.withIndex()) {
-            try {
-                val uri = android.net.Uri.parse(item.uri)
-                val safe = item.displayName.replace(Regex("[^A-Za-z0-9._-]"), "_")
-                val outName = "${idx}_$safe"
-                val outFile = java.io.File(hostDir, outName)
-                ctx.contentResolver.openInputStream(uri)?.use { input ->
-                    outFile.outputStream().use { output -> input.copyTo(output) }
-                } ?: throw IllegalStateException("contentResolver returned null stream for ${item.uri}")
-                outFile.setReadable(true, false)
-                val kind = when {
-                    safe.matches(Regex(".*\\.(png|jpe?g|webp|gif|bmp)$", RegexOption.IGNORE_CASE)) -> "image"
-                    safe.matches(Regex(".*\\.(pdf)$", RegexOption.IGNORE_CASE)) -> "PDF"
-                    else -> "file"
-                }
-                // Tell the agent HOW to consume each kind so it actually uses
-                // the bytes (e.g. route images through vision, not text).
-                val guidance = when (kind) {
-                    "image" -> "This is an IMAGE — use your vision/multimodal capability to look at it and answer about its contents. Do NOT describe it from the filename; read the actual pixels from disk."
-                    "PDF" -> "This is a PDF document — read and analyze its text/contents from disk."
-                    else -> "This is a file — read its contents from disk."
-                }
-                lines.append("- $kind: $insideBase/$outName\n  $guidance\n")
-                copiedCount++
-            } catch (e: Exception) {
-                com.orbitai.core.logging.FileLogger.w(
-                    "ChatViewModel", "Attachment copy failed",
-                    "name=${item.displayName} err=${e.message}"
-                )
-            }
-        }
-        lines.append("--- end attachments ---\n")
-        if (copiedCount < items.size) {
-            lines.append("(Note: ${items.size - copiedCount} attachment(s) could not be read from the picker.)\n")
-        }
-        return lines.toString()
-    }
 
     private val _currentSession = MutableStateFlow<ChatSession?>(null)
     val currentSession: StateFlow<ChatSession?> = _currentSession.asStateFlow()
@@ -190,11 +115,6 @@ class ChatViewModel(
     data class PendingCommand(
         val command: String,
         val isSudo: Boolean
-    )
-
-    data class AttachmentItem(
-        val uri: String,
-        val displayName: String
     )
 
     // AI loop state
@@ -460,18 +380,18 @@ class ChatViewModel(
                 role = MessageRole.USER,
                 content = content,
                 timestamp = System.currentTimeMillis(),
-                attachments = _attachments.value.map { it.displayName }
+                attachments = attachmentsManager.attachments.value.map { it.displayName }
             )
             repository.insertMessage(userMsg)
 
             // Multimodal / attachments: copy queued files into a PRoot-visible
             // dir and build a suffix telling the agent where to read them.
-            val attachSuffix = prepareAttachmentsForAgent()
+            val attachSuffix = attachmentsManager.prepareForAgent()
             val currentTurn = if (attachSuffix.isBlank()) content else content + attachSuffix
             // The agent gets ONLY the current turn; openclaude resumes its own
             // transcript for context (real session memory, no re-sent history).
             val agentContent = currentTurn
-            clearAttachments()
+            attachmentsManager.clear()
 
             // ── Hermes edition: run the REAL local hermes-agent on-device ──
             // The agent (LLM reasoning + tool calls + shell) runs inside the
