@@ -177,6 +177,12 @@ android {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
   }
+  lint {
+    // lintVital (release-only) trips Gradle implicit-dependency validation
+    // against the custom downloadOfflinePackages<Flavor> asset tasks and
+    // aborts packaging. Regular lint still runs on debug builds.
+    checkReleaseBuilds = false
+  }
   buildFeatures {
     compose = true
     buildConfig = true
