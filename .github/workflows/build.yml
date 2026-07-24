@@ -173,7 +173,9 @@ jobs:
         disable-animations: true
         script: |
           APK=$(ls apk/*.apk | head -1)
-          PKG=$(aapt2 dump packagename "$APK")
+          # aapt2 isn't on the runner PATH; package ids are deterministic:
+          # normal -> Orbit.app, every other flavor -> Orbit.<flavor>
+          if [ "${{ matrix.flavor }}" = "normal" ]; then PKG="Orbit.app"; else PKG="Orbit.${{ matrix.flavor }}"; fi
           echo "APK=$APK  PKG=$PKG"
           adb install -r "$APK"
           adb logcat -c
