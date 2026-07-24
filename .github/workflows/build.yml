@@ -160,9 +160,13 @@ jobs:
     - name: Boot emulator + install/launch ${{ matrix.flavor }} and assert no crash
       uses: reactivecircus/android-emulator-runner@v2
       with:
-        api-level: 34
+        # x86_64 + KVM boots in ~2 min on GitHub runners. ARM64 images can't be
+        # KVM-accelerated on x86 hosts and never finish booting (every prior run
+        # timed out). API 30 google_apis x86_64 ships ARM translation (libndk),
+        # so the arm64-only APK (libproot.so) still installs and runs.
+        api-level: 30
         target: google_apis
-        arch: arm64-v8a
+        arch: x86_64
         profile: pixel_6
         force-avd-creation: false
         emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -partition-size 2048
