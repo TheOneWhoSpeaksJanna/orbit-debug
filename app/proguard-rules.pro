@@ -56,3 +56,9 @@
 -keepclassmembers class * {
     @androidx.compose.runtime.Composable <methods>;
 }
+
+# Tink (via androidx.security-crypto) references errorprone/j2objc annotations
+# that exist only at compile time; R8 full-mode treats them as missing classes.
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn com.google.j2objc.annotations.**
+-dontwarn javax.annotation.**
