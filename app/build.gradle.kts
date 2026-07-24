@@ -130,10 +130,22 @@ android {
   signingConfigs {
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH")?.takeIf { it.isNotBlank() } ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+      val uploadKeystore = file(keystorePath)
+      if (uploadKeystore.exists() && !System.getenv("STORE_PASSWORD").isNullOrBlank()) {
+        storeFile = uploadKeystore
+        storePassword = System.getenv("STORE_PASSWORD")
+        keyAlias = "upload"
+        keyPassword = System.getenv("KEY_PASSWORD")
+      } else {
+        // No upload keystore configured (CI has no signing secrets): sign
+        // release builds with the committed debug keystore instead. This keeps
+        // R8/minify/baseline-profile optimizations in the shipped APK while
+        // preserving one consistent cert across builds (updates keep working).
+        storeFile = file("debug.keystore")
+        storePassword = System.getenv("CI_DEBUG_STORE_PASSWORD") ?: "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = System.getenv("CI_DEBUG_KEY_PASSWORD") ?: "android"
+      }
     }
     create("ciDebug") {
       val debugKeystore = file("debug.keystore")

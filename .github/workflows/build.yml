@@ -64,10 +64,13 @@ jobs:
         # Keep the daemon warm + reuse the build cache across steps/runners.
         cache-encryption-key: ${{ secrets.GRADLE_CACHE_ENCRYPTION_KEY }}
 
-    - name: Build debug APK (${{ matrix.flavor }})
-      # No --no-daemon: the setup-gradle action manages a warm daemon + cache,
-      # which is far faster than a cold start per invocation.
-      run: ./gradlew assemble${{ matrix.flavor }}Debug --build-cache
+    - name: Build APK (${{ matrix.flavor }})
+      # Release build: R8 minify + resource shrink + embedded baseline profile
+      # (assets/dexopt/baseline.prof) — the actual "fluid on all devices" bits.
+      # Debug builds skip ALL of these optimizations. Signed with the committed
+      # debug keystore when no upload keystore secrets are configured.
+      # No --no-daemon: the setup-gradle action manages a warm daemon + cache.
+      run: ./gradlew assemble${{ matrix.flavor }}Release --build-cache
 
     - name: Run unit tests (normal only)
       if: matrix.flavor == 'normal'
@@ -76,9 +79,9 @@ jobs:
     - name: Collect APK + version-info
       run: |
         mkdir -p release
-        APK=$(ls app/build/outputs/apk/${{ matrix.flavor }}/debug/*.apk | head -1)
+        APK=$(ls app/build/outputs/apk/${{ matrix.flavor }}/release/*.apk | head -1)
         SHA=$(sha256sum "$APK" | cut -d' ' -f1)
-        cp "$APK" "release/orbit-ai-${{ matrix.flavor }}-debug-${{ github.run_number }}.apk"
+        cp "$APK" "release/orbit-ai-${{ matrix.flavor }}-release-${{ github.run_number }}.apk"
         FLAVOR="${{ matrix.flavor }}"
         export FLAVOR SHA
         python3 - <<'PY'
@@ -88,7 +91,7 @@ jobs:
         if os.path.exists(path):
             info = json.load(open(path))
         info.setdefault("flavors", {})
-        apk = "orbit-ai-%s-debug-${{ github.run_number }}.apk" % os.environ["FLAVOR"]
+        apk = "orbit-ai-%s-release-${{ github.run_number }}.apk" % os.environ["FLAVOR"]
         info["flavors"][os.environ["FLAVOR"]] = {
             "versionCode": ${{ github.run_number }},
             "apk": apk,
