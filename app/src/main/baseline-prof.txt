@@ -1,25 +1,46 @@
 # Baseline Profile — precompiles hot code paths at install time (R8 + ART),
 # which removes first-launch / first-scroll jank on low-end devices.
-# Hand-authored (no device profiling available in CI); class-level rules so R8
-# profiles every method of the listed hot classes. Consumed automatically by
-# R8 during minify and embedded in assets/dexopt/baseline.prof.
-HSPLcom/orbitai/OrbitAiApplication;
-HSPLcom/orbitai/MainActivity;
-HSPLcom/orbitai/ui/screens/ChatScreenKt;
-HSPLcom/orbitai/ui/viewmodels/ChatViewModel;
-HSPLcom/orbitai/ui/viewmodels/SetupViewModel;
-HSPLcom/orbitai/ui/viewmodels/ProvidersViewModel;
-HSPLcom/orbitai/ui/viewmodels/SettingsViewModel;
-HSPLcom/orbitai/data/local/runtime/TermuxRuntime;
-HSPLcom/orbitai/data/local/runtime/OrbitRuntimeManager;
-HSPLcom/orbitai/data/local/runtime/HermesRuntime;
-HSPLcom/orbitai/core/di/AppContainer;
-HSPLcom/orbitai/data/local/OrbitDatabase;
-HSPLcom/orbitai/data/local/dao/OrbitAiDao;
-HSPLcom/orbitai/data/repository/OrbitAiRepositoryImpl;
-HSPLcom/orbitai/ui/theme/ThemeKt;
-HSPLcom/orbitai/ui/components/ModelBrowserSheetKt;
-HSPLcom/orbitai/ui/screens/SetupWizardScreenKt;
-HSPLcom/orbitai/ui/screens/SettingsScreenKt;
-HSPLcom/orbitai/ui/screens/ProvidersScreenKt;
-HSPLcom/orbitai/ui/screens/DashboardScreenKt;
+# Hand-authored (no device profiling available in CI).
+# Syntax: `Lclass;` = keep class in primary dex / startup set (no flags allowed
+# on class rules); `HSPL<class>;->**(**)**` = wildcard method rule (Hot,
+# Startup, Post-startup) expanded by AGP's ExpandArtProfileWildcardsTask.
+Lcom/orbitai/OrbitAiApplication;
+HSPLcom/orbitai/OrbitAiApplication;->**(**)**
+Lcom/orbitai/MainActivity;
+HSPLcom/orbitai/MainActivity;->**(**)**
+Lcom/orbitai/ui/screens/ChatScreenKt;
+HSPLcom/orbitai/ui/screens/ChatScreenKt;->**(**)**
+Lcom/orbitai/ui/viewmodels/ChatViewModel;
+HSPLcom/orbitai/ui/viewmodels/ChatViewModel;->**(**)**
+Lcom/orbitai/ui/viewmodels/SetupViewModel;
+HSPLcom/orbitai/ui/viewmodels/SetupViewModel;->**(**)**
+Lcom/orbitai/ui/viewmodels/ProvidersViewModel;
+HSPLcom/orbitai/ui/viewmodels/ProvidersViewModel;->**(**)**
+Lcom/orbitai/ui/viewmodels/SettingsViewModel;
+HSPLcom/orbitai/ui/viewmodels/SettingsViewModel;->**(**)**
+Lcom/orbitai/data/local/runtime/TermuxRuntime;
+HSPLcom/orbitai/data/local/runtime/TermuxRuntime;->**(**)**
+Lcom/orbitai/data/local/runtime/OrbitRuntimeManager;
+HSPLcom/orbitai/data/local/runtime/OrbitRuntimeManager;->**(**)**
+Lcom/orbitai/data/local/runtime/HermesRuntime;
+HSPLcom/orbitai/data/local/runtime/HermesRuntime;->**(**)**
+Lcom/orbitai/core/di/AppContainer;
+HSPLcom/orbitai/core/di/AppContainer;->**(**)**
+Lcom/orbitai/data/local/OrbitDatabase;
+HSPLcom/orbitai/data/local/OrbitDatabase;->**(**)**
+Lcom/orbitai/data/local/dao/OrbitAiDao;
+HSPLcom/orbitai/data/local/dao/OrbitAiDao;->**(**)**
+Lcom/orbitai/data/repository/OrbitAiRepositoryImpl;
+HSPLcom/orbitai/data/repository/OrbitAiRepositoryImpl;->**(**)**
+Lcom/orbitai/ui/theme/ThemeKt;
+HSPLcom/orbitai/ui/theme/ThemeKt;->**(**)**
+Lcom/orbitai/ui/components/ModelBrowserSheetKt;
+HSPLcom/orbitai/ui/components/ModelBrowserSheetKt;->**(**)**
+Lcom/orbitai/ui/screens/SetupWizardScreenKt;
+HSPLcom/orbitai/ui/screens/SetupWizardScreenKt;->**(**)**
+Lcom/orbitai/ui/screens/SettingsScreenKt;
+HSPLcom/orbitai/ui/screens/SettingsScreenKt;->**(**)**
+Lcom/orbitai/ui/screens/ProvidersScreenKt;
+HSPLcom/orbitai/ui/screens/ProvidersScreenKt;->**(**)**
+Lcom/orbitai/ui/screens/DashboardScreenKt;
+HSPLcom/orbitai/ui/screens/DashboardScreenKt;->**(**)**
