@@ -1,6 +1,7 @@
 package com.orbitai.domain.repository
 
 import com.orbitai.domain.models.*
+import androidx.paging.PagingData
 import kotlinx.coroutines.flow.Flow
 
 interface OrbitAiRepository {
@@ -12,6 +13,9 @@ interface OrbitAiRepository {
     suspend fun insertSession(session: ChatSession)
 
     fun getMessagesForSession(sessionId: String): Flow<List<Message>>
+    // Windowed, paged message stream (Paging3) for the chat list — keeps long
+    // conversations light on memory/CPU on low-end devices.
+    fun getPagedMessages(sessionId: String): Flow<PagingData<Message>>
     suspend fun insertMessage(message: Message)
     suspend fun deleteMessagesForSession(sessionId: String)
 

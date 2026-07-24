@@ -1,6 +1,7 @@
 package com.orbitai.data.local.dao
 
 import androidx.room.*
+import androidx.paging.PagingSource
 import com.orbitai.data.local.entity.*
 import kotlinx.coroutines.flow.Flow
 
@@ -24,6 +25,12 @@ interface OrbitAiDao {
 
     @Query("SELECT * FROM messages WHERE sessionId = :sessionId ORDER BY timestamp ASC")
     fun getMessagesForSession(sessionId: String): Flow<List<MessageEntity>>
+
+    // Windowed source for Paging3 — loads messages in pages instead of the
+    // entire conversation at once, so long chats stay light on memory/CPU
+    // (critical for fluid scrolling on low-end devices).
+    @Query("SELECT * FROM messages WHERE sessionId = :sessionId ORDER BY timestamp ASC")
+    fun getPagedMessages(sessionId: String): PagingSource<Int, MessageEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: MessageEntity)

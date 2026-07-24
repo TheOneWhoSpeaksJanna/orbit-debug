@@ -12,8 +12,10 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
+import androidx.paging.compose.LazyPagingItems
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -85,7 +87,7 @@ fun ChatScreen(
     viewModel: ChatViewModel = viewModel(factory = ChatViewModel.Factory)
 ) {
     val currentSession by viewModel.currentSession.collectAsState()
-    val messages by viewModel.messages.collectAsState()
+    val messages = viewModel.messages.collectAsLazyPagingItems()
     val isLoading by viewModel.isLoading.collectAsState()
     val availableModels by viewModel.availableModels.collectAsState()
     val selectedModel by viewModel.selectedModel.collectAsState()
@@ -155,7 +157,7 @@ fun ChatScreen(
         onSessionIdResolved(viewModel.currentSession.value?.id)
     }
 
-    val lastMessageId = messages.lastOrNull()?.id
+    val lastMessageId = messages.itemSnapshotList.lastOrNull()?.id
     val isNearBottom by remember {
         derivedStateOf {
             listState.firstVisibleItemIndex >= listState.layoutInfo.totalItemsCount - 3
@@ -163,7 +165,7 @@ fun ChatScreen(
     }
     LaunchedEffect(lastMessageId) {
         if (lastMessageId != null && isNearBottom) {
-            listState.scrollToItem(messages.size - 1)
+            listState.scrollToItem(messages.itemCount - 1)
         }
     }
 
@@ -279,23 +281,25 @@ fun ChatScreen(
                     contentPadding = PaddingValues(vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    if (messages.isEmpty() && !isLoading && !showTranscript) {
+                    if (messages.itemCount == 0 && !isLoading && !showTranscript) {
                         item { WelcomePlaceholder() }
                     }
-                    // Key by id+index so two messages can never collide on the
-                    // same LazyColumn key (would otherwise crash the transcript
-                    // the moment a streamed reply is appended).
+                    // Key by id so messages are stable across page loads and
+                    // only changed items recompose (fluid scrolling on low-end
+                    // devices — no full list rebuild per insert).
                     items(
-                        count = messages.size,
-                        key = { index -> "${messages[index].id}#$index" }
+                        count = messages.itemCount,
+                        key = messages.itemKey { it.id }
                     ) { index ->
                         val message = messages[index]
-                        MessageBubble(
-                            content = message.content,
-                            isUser = message.role == MessageRole.USER,
-                            attachments = message.attachments,
-                            modifier = Modifier.staggeredEntrance(index = 0, itemId = message.id)
-                        )
+                        if (message != null) {
+                            MessageBubble(
+                                content = message.content,
+                                isUser = message.role == MessageRole.USER,
+                                attachments = message.attachments,
+                                modifier = Modifier.staggeredEntrance(index = 0, itemId = message.id)
+                            )
+                        }
                     }
                     // Live transcript (transparency): shows the agent's raw
                     // stdout/stderr as it streams, so nothing is hidden.

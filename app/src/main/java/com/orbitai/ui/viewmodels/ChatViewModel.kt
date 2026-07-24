@@ -18,6 +18,7 @@ import com.orbitai.domain.models.ChatSession
 import com.orbitai.domain.models.DetailedModelInfo
 import com.orbitai.domain.models.Message
 import com.orbitai.domain.models.MessageRole
+import androidx.paging.PagingData
 import com.orbitai.domain.models.TermuxLog
 import com.orbitai.domain.repository.OrbitAiRepository
 import com.orbitai.domain.models.AgentPermissionLevel
@@ -29,7 +30,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Dispatchers
 import kotlin.text.RegexOption
@@ -90,8 +93,10 @@ class ChatViewModel(
     private val _currentSession = MutableStateFlow<ChatSession?>(null)
     val currentSession: StateFlow<ChatSession?> = _currentSession.asStateFlow()
 
-    private val _messages = MutableStateFlow<List<Message>>(emptyList())
-    val messages: StateFlow<List<Message>> = _messages.asStateFlow()
+    // Paged message stream (Paging3) — windowed DB reads keep long chats
+    // light on memory/CPU even on low-end devices.
+    private val _messages = MutableStateFlow<PagingData<Message>>(PagingData.empty())
+    val messages: StateFlow<PagingData<Message>> = _messages.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -269,9 +274,9 @@ class ChatViewModel(
             repository.getAllSessions().firstOrNull()?.find { it.id == sessionId }?.let {
                 _currentSession.value = it
             }
-            repository.getMessagesForSession(sessionId).collect { msgs ->
-                _messages.value = msgs
-            }
+            repository.getPagedMessages(sessionId).onEach { pd ->
+                _messages.value = pd
+            }.launchIn(viewModelScope)
         }
     }
 
@@ -288,7 +293,7 @@ class ChatViewModel(
             // session instead of spawning a fresh "New Session" every time.
             repository.insertSession(session)
             _currentSession.value = session
-            _messages.value = emptyList()
+            _messages.value = PagingData.empty()
             loadSession(session.id)
         }
     }
@@ -661,39 +666,6 @@ class ChatViewModel(
                 _isLoading.value = false
                 return@launch
             }
-
-            val apiKey = prefsManager.getApiKeyForProvider(activeProvider).firstOrNull() ?: ""
-
-            val agentEntity = repository.getAllAgents().firstOrNull()?.find { it.id == activeAgentId }
-            val systemPrompt = agentEntity?.systemPrompt ?: DEFAULT_SYSTEM_PROMPT
-
-            val promptBuilder = StringBuilder()
-            promptBuilder.append("$systemPrompt\n\n")
-
-            // Append enabled skills
-            val skills = repository.getAllSkills().firstOrNull().orEmpty()
-            val enabledSkills = skills.filter { it.enabled && it.content.isNotBlank() }
-            if (enabledSkills.isNotEmpty()) {
-                promptBuilder.append("## Active Skills\n\n")
-                for (skill in enabledSkills) {
-                    promptBuilder.append("### ${skill.name}\n")
-                    promptBuilder.append("${skill.content}\n\n")
-                }
-            }
-
-            _messages.value.forEach { msg ->
-                promptBuilder.append("${msg.role.name}: ${msg.content}\n")
-            }
-            promptBuilder.append("USER: $agentContent\nMODEL: ")
-
-            loopPromptBuilder = promptBuilder
-            loopContinueLooping = true
-            loopSessionId = session.id
-            loopActiveProvider = activeProvider
-            loopActiveModelName = activeModelName
-            loopApiKey = apiKey
-
-            continueAiLoop()
         }
     }
 
@@ -723,7 +695,7 @@ class ChatViewModel(
             val session = _currentSession.value ?: return
             viewModelScope.launch(exceptionHandler) {
                 repository.deleteMessagesForSession(session.id)
-                _messages.value = emptyList()
+                _messages.value = PagingData.empty()
                 postSystemMessage("Session cleared.")
             }
         }

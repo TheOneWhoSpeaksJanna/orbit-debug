@@ -7,6 +7,10 @@ import com.orbitai.domain.models.*
 import com.orbitai.domain.repository.OrbitAiRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.map
 
 class OrbitAiRepositoryImpl(
     private val dao: OrbitAiDao
@@ -33,6 +37,11 @@ class OrbitAiRepositoryImpl(
 
     override fun getMessagesForSession(sessionId: String): Flow<List<Message>> =
         dao.getMessagesForSession(sessionId).map { list -> list.map { it.toMessage() } }
+
+    override fun getPagedMessages(sessionId: String): Flow<PagingData<Message>> =
+        Pager(PagingConfig(pageSize = 30, enablePlaceholders = false, prefetchDistance = 10)) {
+            dao.getPagedMessages(sessionId)
+        }.flow.map { pagingData -> pagingData.map { it.toMessage() } }
 
     override suspend fun insertMessage(message: Message) {
         FileLogger.d(TAG, "insertMessage", "sessionId=${message.sessionId} role=${message.role}")
